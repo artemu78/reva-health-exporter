@@ -6,12 +6,15 @@ Testing is a primary product capability for this project. Health export failures
 
 An implementation issue is complete only when:
 
-1. its required automated tests exist and pass;
-2. the full fast test suite remains green;
-3. Android-specific tests pass when the issue touches Android behavior;
-4. required physical-device or live-service checks have recorded sanitized evidence;
-5. every defect found while implementing the issue has a regression test;
-6. no test or artifact contains personal health values or credentials.
+1. it was implemented in its own issue branch and submitted through its own pull request;
+2. the pull request links the issue with `Closes #<number>`;
+3. its required automated tests exist and pass;
+4. the full fast test suite remains green;
+5. Android-specific tests pass when the issue touches Android behavior;
+6. required physical-device or live-service checks have recorded sanitized evidence;
+7. every defect found while implementing the issue has a regression test;
+8. no test or artifact contains personal health values or credentials;
+9. all required repository checks pass before merge.
 
 Manual testing never substitutes for an automatable check. Automated tests never substitute for the two irreducible external checks: actual Mi Fitness interoperability and actual Google authorization/Drive behavior.
 
