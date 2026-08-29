@@ -27,7 +27,27 @@ The first remote destination will be a visible folder in the user's own Google D
 
 ## Current status
 
-The project is currently in the planning and diagnostic-design phase. There is no installable APK yet. Work is organized into small, test-first issues, with one branch and pull request per issue.
+The Android 11 application scaffold is now available. It contains one Kotlin application module with a minimal launcher screen; Health Connect integration remains the next diagnostic milestone.
+
+## Build and test
+
+Use JDK 17 and an Android SDK containing platform 36. The Gradle wrapper downloads the supported Gradle version, so a separate Gradle installation is not required.
+
+Run the fast checks used by CI:
+
+```sh
+./gradlew test lintDebug assembleDebug
+```
+
+The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+
+Run the launch test on an Android 11 (API 30) device or emulator:
+
+```sh
+./gradlew connectedDebugAndroidTest
+```
+
+GitHub Actions runs the fast checks and the API 30 instrumentation test in separate clean jobs. Build reports and the debug APK are retained as workflow artifacts.
 
 Start here:
 
