@@ -8,6 +8,17 @@ The app reads health data that Xiaomi Mi Fitness exposes through Health Connect 
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the application structure, [ROADMAP.md](ROADMAP.md) for the dependency-ordered implementation plan, and [TESTING.md](TESTING.md) for the mandatory test strategy.
 
+## Issue and pull-request workflow
+
+- Implement every GitHub issue in its own branch and deliver it through its own pull request.
+- Name branches `issue-<number>-<short-slug>`, for example `issue-3-health-connect-probe`.
+- Create the branch from the latest `main` after all prerequisite issues have merged.
+- Keep one issue's implementation, tests, and documentation together; do not combine unrelated issues in one branch or pull request.
+- Include `Closes #<number>` in the pull-request description so merging closes the issue.
+- Do not commit implementation work directly to `main`.
+- Do not merge until the issue's required tests and repository checks pass and the pull request contains the required verification evidence.
+- If an issue reveals additional scope, create a follow-up issue instead of silently expanding the current pull request.
+
 ## Delivery phases
 
 ### 1. Diagnostic app
