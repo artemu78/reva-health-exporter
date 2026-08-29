@@ -43,6 +43,7 @@ class ApplicationContractTest {
         val configuration = workflow.readText()
         assertTrue(configuration.contains("./gradlew test lintDebug assembleDebug"))
         assertTrue(configuration.contains("api-level: 30"))
+        assertTrue(configuration.contains("KERNEL==\"kvm\""))
         assertTrue(configuration.contains("./gradlew connectedDebugAndroidTest"))
     }
 }
