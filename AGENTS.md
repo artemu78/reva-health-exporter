@@ -6,7 +6,7 @@ This project is a small, private Android application for Android 11. It is inten
 
 The app reads health data that Xiaomi Mi Fitness exposes through Health Connect for a Xiaomi Smart Band 9. It does not communicate with the band directly over Bluetooth and does not attempt to reverse-engineer Xiaomi protocols.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the application structure, data flow, delivery phases, and export-destination boundaries.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the application structure and [ROADMAP.md](ROADMAP.md) for the dependency-ordered, verifiable implementation plan.
 
 ## Delivery phases
 
