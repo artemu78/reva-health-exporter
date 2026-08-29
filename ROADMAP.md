@@ -6,6 +6,8 @@ This roadmap splits the MVP into independently verifiable GitHub issues. Each is
 
 - Complete issues in dependency order.
 - Keep every issue small enough to review and verify independently.
+- Write the failing test or executable verification before implementing behavior.
+- Follow [TESTING.md](TESTING.md); its completion rule applies to every issue.
 - Use synthetic health values in tests and repository fixtures.
 - Never commit personal health records, access tokens, credentials, or raw device diagnostics.
 - Treat empty Health Connect results as evidence of no accessible records, not evidence that the band collected nothing.
@@ -19,6 +21,12 @@ Health Connect does not expose a universal operation that enumerates every possi
 
 **Outcome:** A minimal installable Kotlin app named **Reva Health Exporter**.
 
+**Required tests:**
+
+- Gradle unit-test smoke test and manifest/resource assertions.
+- API 30 instrumented launch test that verifies the application label and first screen.
+- CI proof that unit tests, lint, assembly, and API 30 instrumentation run from a clean checkout.
+
 **Acceptance criteria:**
 
 - [ ] The project uses Kotlin and has one Android application module.
@@ -31,6 +39,13 @@ Health Connect does not expose a universal operation that enumerates every possi
 ### 2. Detect Health Connect and manage read permissions
 
 **Outcome:** The app reports Health Connect readiness and requests only selected read permissions.
+
+**Required tests:**
+
+- Parameterized unit tests for available, unavailable, and update-required provider states.
+- Permission-state tests for none, partial, all, denial, and revocation.
+- UI tests for every resulting message and action.
+- Physical Android 11 grant, deny, and revoke scenarios.
 
 **Acceptance criteria:**
 
@@ -47,6 +62,13 @@ Health Connect does not expose a universal operation that enumerates every possi
 
 Initial candidates include steps, heart rate, resting heart rate, sleep, distance, calories, exercise sessions, and oxygen saturation when supported by the installed provider.
 
+**Required tests:**
+
+- `FakeHealthConnectClient` tests for every candidate type, empty data, and multiple origins.
+- Pagination tests including failure or expired token after a successful page.
+- Tests for partial permission, API exception, cancellation, and one-type failure isolation.
+- Time-window tests at exact boundaries, midnight, and daylight-saving transitions.
+
 **Acceptance criteria:**
 
 - [ ] Each candidate type is queried over a bounded configurable time window.
@@ -61,6 +83,13 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 
 **Outcome:** A user can inspect Health Connect results without reading application logs.
 
+**Required tests:**
+
+- View-model or presenter tests for every diagnostic screen state.
+- Semantic UI tests for refresh, time-window selection, preview opt-in, and recoverable errors.
+- Lifecycle recreation test preserving the last valid state.
+- Accessibility assertions for labels and actionable controls.
+
 **Acceptance criteria:**
 
 - [ ] Every candidate type has a summary showing status, count, time coverage, and origins.
@@ -74,6 +103,13 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 
 **Outcome:** The user can save diagnostic evidence without enabling cloud export.
 
+**Required tests:**
+
+- Deterministic serializer and golden-fixture tests using synthetic data.
+- Document-output tests for success, cancellation, unavailable destination, and write failure.
+- Parsing test for the produced file and negative tests for malformed input.
+- Privacy assertion that forbidden raw-value, token, and credential fields are absent by default.
+
 **Acceptance criteria:**
 
 - [ ] Android's document picker is used for the destination.
@@ -86,6 +122,13 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 ### 6. Validate Mi Fitness data on the real Android 11 phone
 
 **Outcome:** We know which Smart Band 9 metrics Mi Fitness actually exposes through Health Connect.
+
+**Required tests:**
+
+- Execute a written physical-device protocol twice for both 24-hour and seven-day windows.
+- Cross-check source, count, and time coverage against Health Connect or its Toolbox without recording personal values.
+- Repeat after Mi Fitness resynchronization and after phone restart.
+- Record every unautomatable claim as sanitized evidence or `UNVERIFIED`.
 
 **Acceptance criteria:**
 
@@ -105,6 +148,13 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 
 **Outcome:** Confirmed Health Connect types have a stable portable representation.
 
+**Required tests:**
+
+- Mapper tests for every confirmed type, optional-field combination, and unit conversion.
+- Boundary and generated-data tests for timestamps, ranges, numeric limits, and ordering.
+- Deterministic serialization, round-trip, gzip, malformed-input, and schema-rejection tests.
+- Frozen version-1 compatibility fixtures that future versions must continue to read or explicitly migrate.
+
 **Acceptance criteria:**
 
 - [ ] The format defines schema version, pseudonymous installation ID, batch ID, creation time, covered time window, record type, origin, and canonical values.
@@ -118,6 +168,13 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 ### 8. Verify background Health Connect access on Android 11
 
 **Outcome:** We know whether unattended reads work on the target phone.
+
+**Required tests:**
+
+- Unit tests for feature available, unavailable, permission missing, permission revoked, and API failure.
+- Worker tests with a fake Health Connect client for success, retryable failure, and user-action-required outcomes.
+- Physical-device tests with the app backgrounded, process removed, and phone restarted.
+- Assert that no background path attempts to launch permission UI.
 
 **Acceptance criteria:**
 
@@ -134,6 +191,14 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 ### 9. Implement immutable batching, checkpoints, and local destination
 
 **Outcome:** Incremental export survives retry, failure, and application restart.
+
+**Required tests:**
+
+- Exhaustive state-transition tests for batch creation, pending, upload, confirmation, and checkpoint advancement.
+- Failure injection before and after every persistence and destination boundary.
+- Restart recovery tests for every durable intermediate state.
+- Duplicate, out-of-order, overlapping-window, exact-boundary, and concurrent-trigger tests.
+- Atomic local-write and corrupt-state recovery tests.
 
 **Acceptance criteria:**
 
@@ -152,6 +217,13 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 
 **Outcome:** A user can connect, reconnect, and disconnect Google Drive access.
 
+**Required tests:**
+
+- Authorization-coordinator tests for success, cancellation, denial, revocation, reconnect, and account switch.
+- UI tests verifying authorization is only launched by an explicit user action.
+- Scope assertion that rejects broader Drive scopes.
+- Live tests with two dedicated accounts and a repository/token scan after setup.
+
 **Acceptance criteria:**
 
 - [ ] The Google Cloud project has an Android OAuth client for the stable application ID and signing fingerprints.
@@ -165,6 +237,14 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 ### 11. Upload retry-safe immutable batches to Google Drive
 
 **Outcome:** A manually triggered batch appears in the user's visible Drive folder.
+
+**Required tests:**
+
+- Fake-gateway contract tests for folder absent, folder present, and duplicate folders.
+- Upload tests for success, authorization failure, forbidden access, rate limit, transient server error, and timeout.
+- Indeterminate-success test where upload succeeds but its response is lost.
+- Idempotency, account isolation, downloaded-gzip, and schema-validation tests.
+- Live retry test using only synthetic data in dedicated accounts.
 
 **Acceptance criteria:**
 
@@ -182,6 +262,14 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 
 **Outcome:** Confirmed records export without opening the app.
 
+**Required tests:**
+
+- Worker unit tests for success, retry, permanent failure, and user-action-required outcomes.
+- WorkManager integration tests for constraints, unique periodic work, cancellation, and interval triggering using official test helpers.
+- Concurrency test for periodic work and `Export now` starting together.
+- Offline-to-online recovery and retry/backoff configuration tests.
+- Physical-device persistence checks after process removal and reboot; never sleep through a real interval in automated tests.
+
 **Acceptance criteria:**
 
 - [ ] Unique periodic work prevents duplicate schedules.
@@ -198,6 +286,14 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 ### 13. Complete Android 11 end-to-end acceptance and signed APK
 
 **Outcome:** A reproducible sideloadable MVP is ready for personal use.
+
+**Required tests:**
+
+- Full automated suite from a clean checkout, including API 30 instrumentation and coverage gates.
+- Scripted clean-install and upgrade journeys on the physical Android 11 phone.
+- End-to-end happy path plus permission revocation, Drive revocation, offline recovery, account switch, and corrupt local-state scenarios.
+- Validate every exported artifact and inspect logs/build outputs for health values and credentials.
+- Repeat the release journey using the signed, minified APK rather than the debug build.
 
 **Acceptance criteria:**
 

@@ -6,7 +6,7 @@ This project is a small, private Android application for Android 11. It is inten
 
 The app reads health data that Xiaomi Mi Fitness exposes through Health Connect for a Xiaomi Smart Band 9. It does not communicate with the band directly over Bluetooth and does not attempt to reverse-engineer Xiaomi protocols.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the application structure and [ROADMAP.md](ROADMAP.md) for the dependency-ordered, verifiable implementation plan.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the application structure, [ROADMAP.md](ROADMAP.md) for the dependency-ordered implementation plan, and [TESTING.md](TESTING.md) for the mandatory test strategy.
 
 ## Delivery phases
 
@@ -15,7 +15,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the application structure and [ROADMA
 Build the smallest useful app first. It should:
 
 - connect to Health Connect and request only the permissions needed for inspection;
-- enumerate available Health Connect record types and contributing data sources;
+- probe a maintained catalog of candidate Health Connect record types and report contributing data sources;
 - display or log recent records in a readable form;
 - make it easy to determine which Smart Band 9 metrics Mi Fitness actually writes to Health Connect.
 
@@ -40,6 +40,17 @@ After the available records and sources have been verified, add periodic export 
 - Keep the Android architecture minimal: a small UI, a focused Health Connect data layer, and a WorkManager worker when exporting is introduced.
 - Avoid unnecessary frameworks, abstractions, services, databases, and premature generalization.
 - Keep the application private, local-first, and narrowly scoped to inspecting and exporting the user's own health data.
+
+## Testing rules
+
+- Tests are a primary deliverable, not cleanup after implementation.
+- Start each issue by writing the smallest failing test for its behavior or invariant.
+- Keep Android, Health Connect, Google Drive, time, ID generation, and file I/O behind replaceable boundaries so core behavior runs in local JVM tests.
+- Use `FakeHealthConnectClient` for automated Health Connect behavior and a fake Drive gateway for automated cloud behavior.
+- Do not close an implementation issue until its required automated tests pass and its issue-specific evidence is attached.
+- Hardware and live-service checks complement automated tests; they do not replace them.
+- Every reproduced defect receives a regression test before its fix.
+- Use only synthetic health records in tests and committed fixtures.
 
 ## Primary risk and validation rule
 
