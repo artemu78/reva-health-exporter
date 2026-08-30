@@ -258,7 +258,7 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 - [x] Downloaded output decompresses and passes schema validation.
 - [x] Retrying the same batch creates no second logical batch.
 - [x] Network or authorization failure does not advance the checkpoint.
-- [x] Two test accounts receive exports only in their own Drives.
+- [ ] Two test accounts receive exports only in their own Drives.
 
 ## Milestone: Android 11 MVP
 

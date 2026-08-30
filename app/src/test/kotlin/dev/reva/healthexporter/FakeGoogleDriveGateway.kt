@@ -3,12 +3,32 @@ package dev.reva.healthexporter
 import java.time.Instant
 import java.util.UUID
 
+class FakeDriveBackend {
+    val accountFiles = mutableMapOf<String, MutableList<GoogleDriveFile>>()
+    val accountFileContents = mutableMapOf<String, MutableMap<String, ByteArray>>()
+
+    fun getFiles(accountId: String): MutableList<GoogleDriveFile> =
+        accountFiles.getOrPut(accountId) { mutableListOf() }
+
+    fun getContents(accountId: String): MutableMap<String, ByteArray> =
+        accountFileContents.getOrPut(accountId) { mutableMapOf() }
+
+    fun clear() {
+        accountFiles.clear()
+        accountFileContents.clear()
+    }
+}
+
 class FakeGoogleDriveGateway(
     override val accountId: String? = "default-test-account",
+    val backend: FakeDriveBackend = FakeDriveBackend(),
 ) : GoogleDriveGateway {
 
-    val files = mutableListOf<GoogleDriveFile>()
-    val fileContents = mutableMapOf<String, ByteArray>()
+    val files: MutableList<GoogleDriveFile>
+        get() = backend.getFiles(accountId ?: "anonymous")
+
+    val fileContents: MutableMap<String, ByteArray>
+        get() = backend.getContents(accountId ?: "anonymous")
 
     var failOnVerifyAccess: GoogleDriveException? = null
     var failOnFindFolders: GoogleDriveException? = null

@@ -12,6 +12,7 @@ import java.net.URL
 import java.net.URLEncoder
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -140,7 +141,7 @@ class GoogleDriveDestination(
         return try {
             val startUtc = batch.header.timeWindow.startInclusive.atZone(ZoneOffset.UTC)
             val year = startUtc.year.toString()
-            val month = String.format("%02d", startUtc.monthValue)
+            val month = String.format(Locale.ROOT, "%02d", startUtc.monthValue)
 
             val targetFolderId = driveGateway.ensureFolderHierarchy(
                 listOf(rootFolderName, schemaFolderName, year, month),
@@ -235,11 +236,13 @@ class DefaultHttpTransport(
             request.headers.forEach { (k, v) -> setRequestProperty(k, v) }
             if (request.body != null) {
                 doOutput = true
-                outputStream.use { it.write(request.body) }
             }
         }
 
         try {
+            if (request.body != null) {
+                connection.outputStream.use { it.write(request.body) }
+            }
             val statusCode = connection.responseCode
             val responseStream = if (statusCode in 200..299) {
                 connection.inputStream
@@ -456,7 +459,8 @@ class HttpGoogleDriveGateway(
     }
 
     private fun parseDriveFile(obj: JsonObject): GoogleDriveFile {
-        val id = obj.get("id")?.asString ?: UUID.randomUUID().toString()
+        val id = obj.get("id")?.asString?.takeIf(String::isNotBlank)
+            ?: throw GoogleDriveException.GeneralDriveException("Google Drive response missing file id: $obj", isRetryable = true)
         val name = obj.get("name")?.asString ?: "untitled"
         val mimeType = obj.get("mimeType")?.asString ?: "application/octet-stream"
         val parents = obj.getAsJsonArray("parents")?.map { it.asString } ?: emptyList()

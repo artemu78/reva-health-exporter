@@ -38,8 +38,8 @@ The test suites in `GoogleDriveDestinationTest` and `HttpGoogleDriveGatewayTest`
 4. **Schema validation & decompression:**
    - Downloaded binary batch payloads from Drive decompress cleanly and validate against Schema Version 1.
 
-5. **Account isolation:**
-   - Exports for Account A and Account B are strictly isolated; operations on Account A cannot write to or read Account B's Drive.
+5. **Account isolation (automated JVM unit test coverage):**
+   - Partitioned shared backend tests verify that exports for Account A and Account B are strictly isolated; operations on Account A cannot write to or read Account B's Drive. Live physical-device verification across two dedicated Google accounts remains `UNVERIFIED` until executed on the target phone.
 
 6. **ExportCoordinator integration:**
    - Checkpoint advances only after durable Drive success.

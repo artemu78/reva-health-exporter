@@ -9,6 +9,7 @@ import java.nio.file.StandardCopyOption
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
 
 sealed interface DestinationStatus {
@@ -65,7 +66,7 @@ class LocalFileDestination(
         val targetDir = if (useHierarchy) {
             val startUtc = batch.header.timeWindow.startInclusive.atZone(ZoneOffset.UTC)
             val year = startUtc.year.toString()
-            val month = String.format("%02d", startUtc.monthValue)
+            val month = String.format(Locale.ROOT, "%02d", startUtc.monthValue)
             File(baseDirectory, "$year/$month")
         } else {
             baseDirectory

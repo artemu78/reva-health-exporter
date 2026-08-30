@@ -332,8 +332,9 @@ class GoogleDriveDestinationTest {
 
     @Test
     fun `account isolation ensures exports for Account A do not leak into Account B`() = runBlocking {
-        val gatewayAccountA = FakeGoogleDriveGateway(accountId = "account-user-A")
-        val gatewayAccountB = FakeGoogleDriveGateway(accountId = "account-user-B")
+        val sharedBackend = FakeDriveBackend()
+        val gatewayAccountA = FakeGoogleDriveGateway(accountId = "account-user-A", backend = sharedBackend)
+        val gatewayAccountB = FakeGoogleDriveGateway(accountId = "account-user-B", backend = sharedBackend)
 
         val destA = GoogleDriveDestination(driveGateway = gatewayAccountA)
         val destB = GoogleDriveDestination(driveGateway = gatewayAccountB)
@@ -347,15 +348,19 @@ class GoogleDriveDestinationTest {
         val resultB = destB.upload(batchB)
         assertTrue(resultB is UploadResult.Success)
 
-        // Account A's Drive has only batch A
+        // Account A's Drive has only batch A and cannot find batch B
         val filesA = gatewayAccountA.files.filter { it.mimeType == "application/gzip" }
         assertEquals(1, filesA.size)
         assertEquals("batch-account-A", filesA.first().appProperties["batchId"])
+        val lookupBInA = gatewayAccountA.findFiles(appProperties = mapOf("batchId" to "batch-account-B"))
+        assertTrue("Account A must not find Account B's batch", lookupBInA.isEmpty())
 
-        // Account B's Drive has only batch B
+        // Account B's Drive has only batch B and cannot find batch A
         val filesB = gatewayAccountB.files.filter { it.mimeType == "application/gzip" }
         assertEquals(1, filesB.size)
         assertEquals("batch-account-B", filesB.first().appProperties["batchId"])
+        val lookupAInB = gatewayAccountB.findFiles(appProperties = mapOf("batchId" to "batch-account-A"))
+        assertTrue("Account B must not find Account A's batch", lookupAInB.isEmpty())
     }
 
     // 6. Destination status and verifyConfiguration tests

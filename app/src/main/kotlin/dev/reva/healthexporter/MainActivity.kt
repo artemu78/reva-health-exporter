@@ -151,12 +151,14 @@ class MainActivity : ComponentActivity() {
     private fun triggerDriveExport() {
         val client = healthConnectClient
         if (client == null) {
-            findViewById<TextView>(R.id.drive_export_status).text = "Health Connect is not ready."
+            findViewById<TextView>(R.id.drive_export_status).text =
+                getString(R.string.drive_export_health_connect_not_ready)
             return
         }
         val state = driveAuthorizationCoordinator.state
         if (state !is DriveAuthorizationState.Connected) {
-            findViewById<TextView>(R.id.drive_export_status).text = "Google Drive must be connected before exporting."
+            findViewById<TextView>(R.id.drive_export_status).text =
+                getString(R.string.drive_export_not_connected)
             return
         }
 
@@ -198,6 +200,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            } catch (cancellation: kotlinx.coroutines.CancellationException) {
+                throw cancellation
             } catch (e: Exception) {
                 findViewById<TextView>(R.id.drive_export_status).text =
                     getString(R.string.drive_export_status_failure, e.message ?: "Unknown error")
@@ -210,14 +214,7 @@ class MainActivity : ComponentActivity() {
     private fun createGoogleDriveGateway(accountId: String?): GoogleDriveGateway {
         return HttpGoogleDriveGateway(
             accountId = accountId,
-            tokenProvider = {
-                try {
-                    // Token resolution for real device run
-                    null
-                } catch (_: Exception) {
-                    null
-                }
-            },
+            tokenProvider = { googleDriveAuthorizationGateway?.getAccessToken() },
         )
     }
 

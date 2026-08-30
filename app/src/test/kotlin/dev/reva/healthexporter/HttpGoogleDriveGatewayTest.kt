@@ -250,4 +250,18 @@ class HttpGoogleDriveGatewayTest {
             assertTrue(e.isRetryable)
         }
     }
+
+    @Test
+    fun `createFolder throws GeneralDriveException when response is missing id`() = runBlocking {
+        val transport = FakeHttpTransport()
+        transport.responseToReturn = HttpResponse(statusCode = 200, body = "{\"name\":\"test\"}".toByteArray())
+        val gateway = HttpGoogleDriveGateway(tokenProvider = { "token" }, transport = transport)
+
+        try {
+            gateway.createFolder("test", null)
+            fail("Expected GeneralDriveException when id is missing")
+        } catch (e: GoogleDriveException.GeneralDriveException) {
+            assertTrue(e.message.contains("missing file id"))
+        }
+    }
 }
