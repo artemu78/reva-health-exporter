@@ -136,6 +136,30 @@ class HealthRecordProbeTest {
     }
 
     @Test
+    fun blankTerminalPageTokenKeepsSuccessfulPageAvailable() = runBlocking {
+        val client = FakeHealthConnectClient()
+        var stepsCalls = 0
+        client.overrides.readRecords = Stub { request ->
+            if (request.recordType != StepsRecord::class) return@Stub null
+            stepsCalls += 1
+            if (stepsCalls > 1) throw IOException("blank token is not a next page")
+            ReadRecordsResponse(
+                records = listOf(steps("2026-08-29T08:00:00Z", "2026-08-29T08:15:00Z")),
+                pageToken = "",
+            )
+        }
+
+        val summary = HealthRecordProbe(client)
+            .probe(window, allPermissions)
+            .summaries
+            .getValue(HealthMetric.STEPS)
+
+        assertEquals(MetricProbeStatus.POPULATED, summary.status)
+        assertEquals(1, summary.count)
+        assertEquals(1, stepsCalls)
+    }
+
+    @Test
     fun failedPageKeepsEarlierPageMetadata() = runBlocking {
         val client = FakeHealthConnectClient()
         client.overrides.readRecords = Stub { request ->
@@ -302,9 +326,49 @@ class HealthRecordProbeTest {
                 oldestTimestamp = Instant.parse("2026-08-29T08:00:00Z"),
                 newestTimestamp = Instant.parse("2026-08-29T09:20:00Z"),
                 dataOrigins = setOf("com.example.mi.fitness"),
+                previews = listOf(
+                    MetricRecordPreview(
+                        startTimestamp = Instant.parse("2026-08-29T09:00:00Z"),
+                        endTimestamp = Instant.parse("2026-08-29T09:20:00Z"),
+                        dataOrigin = "com.example.mi.fitness",
+                    ),
+                    MetricRecordPreview(
+                        startTimestamp = Instant.parse("2026-08-29T08:00:00Z"),
+                        endTimestamp = Instant.parse("2026-08-29T08:15:00Z"),
+                        dataOrigin = "com.example.mi.fitness",
+                    ),
+                ),
             ),
             result.summaries.getValue(HealthMetric.STEPS),
         )
+    }
+
+    @Test
+    fun recordPreviewContainsOnlyThreeMostRecentMetadataEntries() = runBlocking {
+        val client = FakeHealthConnectClient()
+        client.setPackageName("com.example.mi.fitness")
+        client.insertRecords(
+            (1..5).map { hour ->
+                steps("2026-08-29T0${hour}:00:00Z", "2026-08-29T0${hour}:15:00Z")
+            },
+        )
+
+        val preview = HealthRecordProbe(client)
+            .probe(window, allPermissions)
+            .summaries
+            .getValue(HealthMetric.STEPS)
+            .previews
+
+        assertEquals(3, preview.size)
+        assertEquals(
+            listOf(
+                Instant.parse("2026-08-29T05:15:00Z"),
+                Instant.parse("2026-08-29T04:15:00Z"),
+                Instant.parse("2026-08-29T03:15:00Z"),
+            ),
+            preview.map(MetricRecordPreview::endTimestamp),
+        )
+        assertEquals(setOf("com.example.mi.fitness"), preview.mapNotNull { it.dataOrigin }.toSet())
     }
 
     private fun steps(start: String, end: String) = StepsRecord(

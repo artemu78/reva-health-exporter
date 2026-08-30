@@ -53,6 +53,13 @@ data class MetricProbeSummary(
     val oldestTimestamp: Instant? = null,
     val newestTimestamp: Instant? = null,
     val dataOrigins: Set<String> = emptySet(),
+    val previews: List<MetricRecordPreview> = emptyList(),
+)
+
+data class MetricRecordPreview(
+    val startTimestamp: Instant,
+    val endTimestamp: Instant,
+    val dataOrigin: String?,
 )
 
 data class DiagnosticProbeResult(
@@ -170,7 +177,7 @@ class HealthRecordProbe(
                     ),
                 )
                 records += response.records
-                pageToken = response.pageToken
+                pageToken = response.pageToken?.takeIf(String::isNotEmpty)
                 if (pageToken != null && !seenPageTokens.add(pageToken)) {
                     return records.toSummary(
                         metric,
@@ -212,5 +219,18 @@ class HealthRecordProbe(
         dataOrigins = map { it.metadata.dataOrigin.packageName }
             .filter(String::isNotBlank)
             .toSet(),
+        previews = sortedByDescending(endTimestamp)
+            .take(MAX_PREVIEW_RECORDS)
+            .map { record ->
+                MetricRecordPreview(
+                    startTimestamp = startTimestamp(record),
+                    endTimestamp = endTimestamp(record),
+                    dataOrigin = record.metadata.dataOrigin.packageName.takeIf(String::isNotBlank),
+                )
+            },
     )
+
+    private companion object {
+        const val MAX_PREVIEW_RECORDS = 3
+    }
 }
