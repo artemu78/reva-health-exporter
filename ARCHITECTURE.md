@@ -165,6 +165,8 @@ Use compressed immutable batches instead of appending to a remote file. Each bat
 - record type and source metadata;
 - canonical health records.
 
+See [docs/schema-v1.md](docs/schema-v1.md) for the full specification of Schema Version 1, field definitions, canonical units, and validation rules.
+
 Google access is authorized interactively. If authorization is revoked or requires renewed user consent, background work stops safely and the UI asks the user to reconnect; a worker must never attempt to present an authorization screen.
 
 ## Security and privacy boundaries

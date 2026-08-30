@@ -81,4 +81,5 @@ Start here:
 - [Implementation roadmap](ROADMAP.md)
 - [Testing strategy](TESTING.md)
 - [Mi Fitness compatibility report](docs/mi-fitness-compatibility-report.md)
+- [Schema version 1 specification](docs/schema-v1.md)
 - [Open issues](https://github.com/artemu78/reva-health-exporter/issues)
