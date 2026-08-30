@@ -19,12 +19,12 @@ import java.time.ZoneOffset
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
-class ExportBatchSerializer {
+open class ExportBatchSerializer {
     private val gson: Gson = GsonBuilder()
         .setStrictness(Strictness.STRICT)
         .create()
 
-    fun serializeToNdjson(batch: ExportBatch): String {
+    open fun serializeToNdjson(batch: ExportBatch): String {
         val builder = StringBuilder()
         builder.append(gson.toJson(batch.header.toJson())).append('\n')
 
@@ -41,7 +41,7 @@ class ExportBatchSerializer {
         return builder.toString()
     }
 
-    fun parseNdjson(ndjson: String): ExportBatch {
+    open fun parseNdjson(ndjson: String): ExportBatch {
         if (ndjson.isBlank()) {
             throw InvalidExportSchemaException("NDJSON input must not be empty or blank")
         }
@@ -77,24 +77,24 @@ class ExportBatchSerializer {
         return ExportBatch(header = header, records = records)
     }
 
-    fun serializeToGzip(batch: ExportBatch, outputStream: OutputStream) {
+    open fun serializeToGzip(batch: ExportBatch, outputStream: OutputStream) {
         GZIPOutputStream(outputStream).bufferedWriter(Charsets.UTF_8).use { writer ->
             writer.write(serializeToNdjson(batch))
         }
     }
 
-    fun serializeToGzipBytes(batch: ExportBatch): ByteArray {
+    open fun serializeToGzipBytes(batch: ExportBatch): ByteArray {
         val byteStream = ByteArrayOutputStream()
         serializeToGzip(batch, byteStream)
         return byteStream.toByteArray()
     }
 
-    fun decompressAndParse(inputStream: InputStream): ExportBatch {
+    open fun decompressAndParse(inputStream: InputStream): ExportBatch {
         val decompressedText = GZIPInputStream(inputStream).bufferedReader(Charsets.UTF_8).use { it.readText() }
         return parseNdjson(decompressedText)
     }
 
-    fun decompressAndParse(gzipBytes: ByteArray): ExportBatch =
+    open fun decompressAndParse(gzipBytes: ByteArray): ExportBatch =
         ByteArrayInputStream(gzipBytes).use(::decompressAndParse)
 
     private fun BatchHeader.toJson(): JsonObject = JsonObject().apply {
