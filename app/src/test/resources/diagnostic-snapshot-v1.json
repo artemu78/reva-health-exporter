@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "appVersion": "1.0.0",
+  "androidVersion": "Android 11 (API 30)",
+  "permissions": {
+    "granted": [
+      "Steps"
+    ],
+    "missing": [
+      "Heart rate"
+    ]
+  },
+  "window": {
+    "oldest": "2026-08-29T09:00:00Z",
+    "newest": "2026-08-30T09:00:00Z"
+  },
+  "types": [
+    {
+      "type": "Heart rate",
+      "status": "permission_missing",
+      "count": 0,
+      "origins": []
+    },
+    {
+      "type": "Steps",
+      "status": "populated",
+      "count": 2,
+      "origins": [
+        "com.example.synthetic"
+      ],
+      "timeCoverage": {
+        "oldest": "2026-08-30T07:00:00Z",
+        "newest": "2026-08-30T08:00:00Z"
+      }
+    }
+  ]
+}

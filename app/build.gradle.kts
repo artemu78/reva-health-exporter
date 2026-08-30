@@ -19,6 +19,10 @@ android {
     namespace = "dev.reva.healthexporter"
     compileSdk = 36
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = "dev.reva.healthexporter"
         minSdk = 30
@@ -57,6 +61,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.13.0")
     implementation("androidx.health.connect:connect-client:1.1.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+    implementation("com.google.code.gson:gson:2.13.2")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("androidx.health.connect:connect-testing:1.0.0-alpha03") {
