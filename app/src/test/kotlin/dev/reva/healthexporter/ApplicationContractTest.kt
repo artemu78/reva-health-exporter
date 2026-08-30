@@ -35,6 +35,24 @@ class ApplicationContractTest {
     }
 
     @Test
+    fun `application declares adaptive launcher icons`() {
+        val manifest = projectDirectory.resolve("src/main/AndroidManifest.xml")
+        val launcherIcon = projectDirectory.resolve("src/main/res/mipmap-anydpi-v26/ic_launcher.xml")
+        val roundLauncherIcon = projectDirectory.resolve("src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml")
+
+        val manifestDocument = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(manifest.toFile())
+        val application = manifestDocument.getElementsByTagName("application").item(0)
+
+        assertEquals("@mipmap/ic_launcher", application.attributes.getNamedItem("android:icon")?.nodeValue)
+        assertEquals(
+            "@mipmap/ic_launcher_round",
+            application.attributes.getNamedItem("android:roundIcon")?.nodeValue,
+        )
+        assertTrue("Adaptive launcher icon must exist", Files.isRegularFile(launcherIcon))
+        assertTrue("Round adaptive launcher icon must exist", Files.isRegularFile(roundLauncherIcon))
+    }
+
+    @Test
     fun `continuous integration verifies the fast build and API 30 launch test`() {
         val workflow = projectDirectory.resolve("../.github/workflows/android.yml").normalize()
 
