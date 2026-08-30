@@ -111,4 +111,15 @@ class DriveAuthorizationCoordinatorTest {
         )
         assertFalse(DriveAuthorizationScopes.isNarrow(emptySet()))
     }
+
+    @Test
+    fun `authorization resolution is launched before consent has granted scopes`() {
+        assertEquals(
+            DriveAuthorizationNextStep.LaunchResolution,
+            decideDriveAuthorizationNextStep(
+                hasResolution = true,
+                grantedScopes = emptySet(),
+            ),
+        )
+    }
 }
