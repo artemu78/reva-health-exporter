@@ -56,6 +56,53 @@
             android:importantForAccessibility="no" />
 
         <TextView
+            android:id="@+id/drive_authorization_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:accessibilityHeading="true"
+            android:text="@string/drive_authorization_title"
+            android:textAppearance="@android:style/TextAppearance.Material.Title" />
+
+        <TextView
+            android:id="@+id/drive_authorization_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:accessibilityLiveRegion="polite"
+            android:text="@string/drive_disconnected" />
+
+        <Button
+            android:id="@+id/drive_connect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/drive_connect" />
+
+        <Button
+            android:id="@+id/drive_reconnect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/drive_reconnect"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/drive_disconnect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/drive_disconnect"
+            android:visibility="gone" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="24dp"
+            android:background="#33000000"
+            android:importantForAccessibility="no" />
+
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"

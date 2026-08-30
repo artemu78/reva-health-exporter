@@ -13,6 +13,7 @@ import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
@@ -21,8 +22,25 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        private const val DIAGNOSTIC_STATE_KEY = "diagnostic_screen_state"
+        private const val SNAPSHOT_FILE_NAME = "reva-health-diagnostic.json"
+
+        internal var driveAuthorizationGatewayFactory:
+            (ComponentActivity, (DriveAuthorizationResult) -> Unit) -> DriveAuthorizationGateway =
+            { activity, complete -> (activity as MainActivity).createGoogleDriveAuthorizationGateway(complete) }
+
+        internal fun resetDriveAuthorizationGatewayFactory() {
+            driveAuthorizationGatewayFactory =
+                { activity, complete -> (activity as MainActivity).createGoogleDriveAuthorizationGateway(complete) }
+        }
+    }
+
     private lateinit var permissionLauncher: ActivityResultLauncher<Set<String>>
     private lateinit var documentLauncher: ActivityResultLauncher<String>
+    private lateinit var driveResolutionLauncher: ActivityResultLauncher<IntentSenderRequest>
+    private lateinit var driveAuthorizationCoordinator: DriveAuthorizationCoordinator
+    private var googleDriveAuthorizationGateway: GoogleDriveAuthorizationGateway? = null
     private var currentPermissions: PermissionSummary? = null
     private var lastGrantedMetrics: Set<HealthMetric>? = null
     private var persistentNotice = PermissionNotice.NONE
@@ -67,6 +85,27 @@ class MainActivity : ComponentActivity() {
         documentLauncher = registerForActivityResult(
             ActivityResultContracts.CreateDocument("application/json"),
         ) { destination -> exportSnapshot(destination) }
+        driveResolutionLauncher = registerForActivityResult(
+            ActivityResultContracts.StartIntentSenderForResult(),
+        ) { result -> googleDriveAuthorizationGateway?.completeResolution(result.resultCode, result.data) }
+        val driveGateway = driveAuthorizationGatewayFactory(this) { result ->
+            driveAuthorizationCoordinator.complete(result)
+        }
+        googleDriveAuthorizationGateway = driveGateway as? GoogleDriveAuthorizationGateway
+        driveAuthorizationCoordinator = DriveAuthorizationCoordinator(
+            gateway = driveGateway,
+            onStateChanged = ::renderDriveAuthorization,
+        )
+        findViewById<Button>(R.id.drive_connect).setOnClickListener {
+            driveAuthorizationCoordinator.connect()
+        }
+        findViewById<Button>(R.id.drive_reconnect).setOnClickListener {
+            driveAuthorizationCoordinator.reconnect()
+        }
+        findViewById<Button>(R.id.drive_disconnect).setOnClickListener {
+            driveAuthorizationCoordinator.disconnect()
+        }
+        renderDriveAuthorization(driveAuthorizationCoordinator.state)
         findViewById<Button>(R.id.diagnostic_export).setOnClickListener {
             if (lastDiagnosticResult != null) {
                 documentLauncher.launch(SNAPSHOT_FILE_NAME)
@@ -77,6 +116,29 @@ class MainActivity : ComponentActivity() {
         }
         renderBackgroundAccess()
     }
+
+    fun renderDriveAuthorization(state: DriveAuthorizationState) {
+        findViewById<TextView>(R.id.drive_authorization_status).text = when (state) {
+            DriveAuthorizationState.Disconnected -> getString(R.string.drive_disconnected)
+            DriveAuthorizationState.Connecting -> getString(R.string.drive_connecting)
+            is DriveAuthorizationState.Connected -> getString(R.string.drive_connected)
+            DriveAuthorizationState.UserActionRequired -> getString(R.string.drive_user_action_required)
+        }
+        findViewById<Button>(R.id.drive_connect).visibility =
+            if (state == DriveAuthorizationState.Disconnected) View.VISIBLE else View.GONE
+        val connected = state is DriveAuthorizationState.Connected ||
+            state == DriveAuthorizationState.UserActionRequired
+        findViewById<Button>(R.id.drive_reconnect).visibility = if (connected) View.VISIBLE else View.GONE
+        findViewById<Button>(R.id.drive_disconnect).visibility = if (connected) View.VISIBLE else View.GONE
+    }
+
+    private fun createGoogleDriveAuthorizationGateway(
+        complete: (DriveAuthorizationResult) -> Unit,
+    ): GoogleDriveAuthorizationGateway = GoogleDriveAuthorizationGateway(
+        activity = this,
+        resolutionLauncher = driveResolutionLauncher,
+        onComplete = complete,
+    )
 
     override fun onResume() {
         super.onResume()
@@ -427,10 +489,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private companion object {
-        const val DIAGNOSTIC_STATE_KEY = "diagnostic_screen_state"
-        const val SNAPSHOT_FILE_NAME = "reva-health-diagnostic.json"
-    }
 }
 
 sealed interface DiagnosticUiAction {

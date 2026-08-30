@@ -20,6 +20,14 @@
     <string name="diagnostic_export_write_failed">The snapshot could not be written.</string>
     <string name="diagnostic_loading_description">Loading diagnostic results</string>
     <string name="diagnostic_preparing">Preparing diagnostic results…</string>
+    <string name="drive_authorization_title">Google Drive</string>
+    <string name="drive_disconnected">Google Drive is not connected.</string>
+    <string name="drive_connecting">Connecting Google Drive…</string>
+    <string name="drive_connected">Google Drive is connected.</string>
+    <string name="drive_user_action_required">Google Drive access needs your attention. Reconnect to continue.</string>
+    <string name="drive_connect">Connect Google Drive</string>
+    <string name="drive_reconnect">Reconnect Google Drive</string>
+    <string name="drive_disconnect">Disconnect Google Drive</string>
     <string name="background_read_title">Background access</string>
     <string name="background_probe_trigger">Test background read</string>
     <string name="background_probe_trigger_description">Trigger background Health Connect read worker</string>
