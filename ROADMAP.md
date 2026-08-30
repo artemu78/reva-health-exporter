@@ -8,7 +8,7 @@ This roadmap splits the MVP into independently verifiable GitHub issues. Each is
 - Keep every issue small enough to review and verify independently.
 - Implement every issue in a dedicated `issue-<number>-<short-slug>` branch and one dedicated pull request.
 - Branch from the latest `main` after prerequisite issues merge; never implement directly on `main`.
-- Put `Closes #<number>` in the pull-request description and merge only after required tests and checks pass.
+- Put `Closes #<number>` in the pull-request description; merging is performed manually by the user after required tests and checks pass.
 - Create a follow-up issue rather than mixing newly discovered unrelated scope into the current pull request.
 - Write the failing test or executable verification before implementing behavior.
 - Follow [TESTING.md](TESTING.md); its completion rule applies to every issue.

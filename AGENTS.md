@@ -16,7 +16,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the application structure, [ROADMAP.m
 - Keep one issue's implementation, tests, and documentation together; do not combine unrelated issues in one branch or pull request.
 - Include `Closes #<number>` in the pull-request description so merging closes the issue.
 - Do not commit implementation work directly to `main`.
-- Do not merge until the issue's required tests and repository checks pass and the pull request contains the required verification evidence.
+- Pull requests must be opened automatically by the agent once the implementation, tests, and verification evidence are ready and pushed.
+- **Never merge pull requests.** Merging pull requests is strictly a manual step performed by the user after reviewing the pull request and its verification evidence.
 - If an issue reveals additional scope, create a follow-up issue instead of silently expanding the current pull request.
 
 ## Delivery phases
