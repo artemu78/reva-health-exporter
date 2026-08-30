@@ -30,6 +30,9 @@ class MainActivity : ComponentActivity() {
     private var diagnosticJob: Job? = null
     private var healthConnectClient: HealthConnectClient? = null
     private var grantedReadPermissions: Set<String> = emptySet()
+    private var backgroundReadSupport: BackgroundReadSupport = BackgroundReadSupport.UNSUPPORTED
+    private var backgroundSummary: BackgroundReadSummary? = null
+    private val probeStore by lazy { SharedPreferencesBackgroundProbeStore(this) }
     private var lastValidDiagnosticState: DiagnosticScreenState? = null
     private var lastDiagnosticResult: DiagnosticProbeResult? = null
     private val diagnosticPresenter by lazy {
@@ -69,6 +72,10 @@ class MainActivity : ComponentActivity() {
                 documentLauncher.launch(SNAPSHOT_FILE_NAME)
             }
         }
+        findViewById<Button>(R.id.background_probe_trigger).setOnClickListener {
+            triggerBackgroundProbe()
+        }
+        renderBackgroundAccess()
     }
 
     override fun onResume() {
@@ -175,9 +182,22 @@ class MainActivity : ComponentActivity() {
         refreshJob = lifecycleScope.launch {
             val client = HealthConnectClient.getOrCreate(this@MainActivity)
             healthConnectClient = client
+            val featureStatus = try {
+                client.features.getFeatureStatus(
+                    androidx.health.connect.client.HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND,
+                )
+            } catch (_: Exception) {
+                androidx.health.connect.client.HealthConnectFeatures.FEATURE_STATUS_UNAVAILABLE
+            }
+            backgroundReadSupport = classifyBackgroundReadSupport(featureStatus)
             grantedReadPermissions = client.permissionController.getGrantedPermissions()
+            backgroundSummary = summarizeBackgroundRead(
+                support = backgroundReadSupport,
+                grantedPermissions = grantedReadPermissions,
+            )
             val grantedMetrics = metricsFor(grantedReadPermissions)
             showPermissions(grantedMetrics)
+            renderBackgroundAccess()
             refreshDiagnostics()
         }
     }
@@ -215,8 +235,68 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestMissingPermissions() {
-        val missing = currentPermissions?.let(::permissionsToRequest).orEmpty()
+        val missing = currentPermissions?.let(::permissionsToRequest).orEmpty().toMutableSet()
+        val bgMissing = backgroundSummary?.let(::backgroundPermissionsToRequest).orEmpty()
+        missing.addAll(bgMissing)
         if (missing.isNotEmpty()) permissionLauncher.launch(missing)
+    }
+
+    private fun renderBackgroundAccess() {
+        val statusView = findViewById<TextView>(R.id.background_read_status)
+        val triggerButton = findViewById<Button>(R.id.background_probe_trigger)
+        val resultView = findViewById<TextView>(R.id.background_probe_result)
+
+        when (backgroundReadSupport) {
+            BackgroundReadSupport.UNSUPPORTED -> {
+                statusView.text = getString(R.string.background_read_unsupported)
+            }
+            BackgroundReadSupport.AVAILABLE -> {
+                val hasBgPerm = backgroundSummary?.hasBackgroundPermission == true
+                val permText = if (hasBgPerm) "Granted" else "Missing"
+                statusView.text = "${getString(R.string.background_read_supported)} · Permission: $permText"
+            }
+        }
+
+        val lastSummary = probeStore.loadSummary()
+        if (lastSummary != null) {
+            resultView.text = formatBackgroundProbeSummary(lastSummary)
+        } else {
+            resultView.text = getString(R.string.background_probe_no_run)
+        }
+        triggerButton.isEnabled = true
+    }
+
+    private fun triggerBackgroundProbe() {
+        val request = androidx.work.OneTimeWorkRequestBuilder<BackgroundProbeWorker>().build()
+        androidx.work.WorkManager.getInstance(this).enqueueUniqueWork(
+            BackgroundProbeWorker.WORK_NAME,
+            androidx.work.ExistingWorkPolicy.REPLACE,
+            request,
+        )
+        findViewById<TextView>(R.id.background_probe_result).text =
+            getString(R.string.background_probe_running)
+
+        androidx.work.WorkManager.getInstance(this)
+            .getWorkInfoByIdLiveData(request.id)
+            .observe(this) { workInfo ->
+                if (workInfo != null && workInfo.state.isFinished) {
+                    renderBackgroundAccess()
+                }
+            }
+    }
+
+    private fun formatBackgroundProbeSummary(summary: BackgroundReadExecutionSummary): String {
+        val outcomeLabel = when (summary.outcome) {
+            BackgroundReadOutcome.SUCCESS -> "Success"
+            BackgroundReadOutcome.RETRYABLE_FAILURE -> "Failed (retryable)"
+            BackgroundReadOutcome.USER_ACTION_REQUIRED -> "User action required"
+            BackgroundReadOutcome.UNSUPPORTED -> "Unsupported"
+        }
+        val timestamp = summary.executionTimestamp?.let {
+            java.time.format.DateTimeFormatter.ISO_INSTANT.format(it)
+        } ?: "Unknown time"
+        val origins = if (summary.dataOrigins.isEmpty()) "No origins" else summary.dataOrigins.sorted().joinToString()
+        return "Last background probe: $outcomeLabel\nRecords: ${summary.totalRecords} (${summary.readTypesCount} types) · Origins: $origins\nTime: $timestamp\nDetails: ${summary.message}"
     }
 
     private fun performAction(action: HealthConnectAction) {
