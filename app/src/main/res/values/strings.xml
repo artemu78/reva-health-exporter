@@ -30,6 +30,11 @@
     <string name="drive_connect">Connect Google Drive</string>
     <string name="drive_reconnect">Reconnect Google Drive</string>
     <string name="drive_disconnect">Disconnect Google Drive</string>
+    <string name="drive_export_now">Export to Google Drive</string>
+    <string name="drive_export_status_exporting">Exporting batch to Google Drive…</string>
+    <string name="drive_export_status_success">Exported batch %1$s (%2$d records) to Google Drive.</string>
+    <string name="drive_export_status_nothing">No new health records to export.</string>
+    <string name="drive_export_status_failure">Export failed: %1$s</string>
     <string name="background_read_title">Background access</string>
     <string name="background_probe_trigger">Test background read</string>
     <string name="background_probe_trigger_description">Trigger background Health Connect read worker</string>

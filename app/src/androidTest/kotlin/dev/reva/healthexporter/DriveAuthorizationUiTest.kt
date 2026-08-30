@@ -28,6 +28,7 @@ class DriveAuthorizationUiTest {
     @After
     fun tearDown() {
         MainActivity.resetDriveAuthorizationGatewayFactory()
+        MainActivity.resetGoogleDriveGatewayFactory()
     }
 
     @Test
@@ -94,6 +95,27 @@ class DriveAuthorizationUiTest {
                     "Google Drive access needs your attention. Reconnect to continue.",
                     activity.findViewById<TextView>(R.id.drive_authorization_status).text.toString(),
                 )
+            }
+        }
+    }
+
+    @Test
+    fun export_now_button_is_visible_only_when_drive_is_connected() {
+        val gateway = FakeGateway()
+        MainActivity.driveAuthorizationGatewayFactory = { _, complete ->
+            gateway.onLaunch = { complete(DriveAuthorizationResult.Authorized("synthetic-account")) }
+            gateway
+        }
+
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                assertEquals(android.view.View.GONE, activity.findViewById<Button>(R.id.drive_export_now).visibility)
+
+                activity.findViewById<Button>(R.id.drive_connect).performClick()
+                assertEquals(android.view.View.VISIBLE, activity.findViewById<Button>(R.id.drive_export_now).visibility)
+
+                activity.findViewById<Button>(R.id.drive_disconnect).performClick()
+                assertEquals(android.view.View.GONE, activity.findViewById<Button>(R.id.drive_export_now).visibility)
             }
         }
     }

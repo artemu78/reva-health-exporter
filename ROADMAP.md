@@ -252,13 +252,13 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 
 **Acceptance criteria:**
 
-- [ ] The app creates or locates the visible `Reva Health Exporter/schema-v1/...` hierarchy.
-- [ ] Compressed immutable batches are uploaded with stable identities.
-- [ ] Drive `appProperties` or pre-generated IDs support duplicate detection.
-- [ ] Downloaded output decompresses and passes schema validation.
-- [ ] Retrying the same batch creates no second logical batch.
-- [ ] Network or authorization failure does not advance the checkpoint.
-- [ ] Two test accounts receive exports only in their own Drives.
+- [x] The app creates or locates the visible `Reva Health Exporter/schema-v1/...` hierarchy.
+- [x] Compressed immutable batches are uploaded with stable identities.
+- [x] Drive `appProperties` or pre-generated IDs support duplicate detection.
+- [x] Downloaded output decompresses and passes schema validation.
+- [x] Retrying the same batch creates no second logical batch.
+- [x] Network or authorization failure does not advance the checkpoint.
+- [x] Two test accounts receive exports only in their own Drives.
 
 ## Milestone: Android 11 MVP
 
