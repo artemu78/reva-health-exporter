@@ -27,7 +27,7 @@ The first remote destination will be a visible folder in the user's own Google D
 
 ## Current status
 
-The Android 11 application scaffold is now available. It contains one Kotlin application module with a minimal launcher screen; Health Connect integration remains the next diagnostic milestone.
+The diagnostic milestone is complete. The application inspects Health Connect permissions, probes candidate metrics, displays live summaries, exports sanitized snapshots, and confirms that Xiaomi Mi Fitness exposes the core Smart Band 9 metrics (steps, heart rate, distance, calories, sleep) on Android 11.
 
 ## Build and test
 
@@ -80,4 +80,5 @@ Start here:
 - [Architecture](ARCHITECTURE.md)
 - [Implementation roadmap](ROADMAP.md)
 - [Testing strategy](TESTING.md)
+- [Mi Fitness compatibility report](docs/mi-fitness-compatibility-report.md)
 - [Open issues](https://github.com/artemu78/reva-health-exporter/issues)
