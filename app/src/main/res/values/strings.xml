@@ -4,4 +4,14 @@
     <string name="first_screen_title">Reva Health Exporter</string>
     <string name="permissions_rationale_title">Why Reva Health Exporter needs access</string>
     <string name="permissions_rationale_body">The app reads only the selected Health Connect record types to show which health data is available for diagnostics. Health data stays on this phone during this phase and is not exported. You can deny or revoke access at any time.</string>
+    <string name="diagnostic_results_title">Diagnostic results</string>
+    <string name="diagnostic_time_window_description">Diagnostic time window</string>
+    <string name="window_twenty_four_hours">24 hours</string>
+    <string name="window_twenty_four_hours_description">Show results from the last 24 hours</string>
+    <string name="window_seven_days">7 days</string>
+    <string name="window_seven_days_description">Show results from the last 7 days</string>
+    <string name="diagnostic_refresh">Refresh</string>
+    <string name="diagnostic_refresh_description">Refresh diagnostic results</string>
+    <string name="diagnostic_loading_description">Loading diagnostic results</string>
+    <string name="diagnostic_preparing">Preparing diagnostic results…</string>
 </resources>
