@@ -34,6 +34,15 @@ class MainActivity : ComponentActivity() {
             driveAuthorizationGatewayFactory =
                 { activity, complete -> (activity as MainActivity).createGoogleDriveAuthorizationGateway(complete) }
         }
+
+        internal var googleDriveGatewayFactory:
+            (ComponentActivity, String?) -> GoogleDriveGateway =
+            { activity, accountId -> (activity as MainActivity).createGoogleDriveGateway(accountId) }
+
+        internal fun resetGoogleDriveGatewayFactory() {
+            googleDriveGatewayFactory =
+                { activity, accountId -> (activity as MainActivity).createGoogleDriveGateway(accountId) }
+        }
     }
 
     private lateinit var permissionLauncher: ActivityResultLauncher<Set<String>>
@@ -106,6 +115,9 @@ class MainActivity : ComponentActivity() {
         findViewById<Button>(R.id.drive_disconnect).setOnClickListener {
             driveAuthorizationCoordinator.disconnect()
         }
+        findViewById<Button>(R.id.drive_export_now).setOnClickListener {
+            triggerDriveExport()
+        }
         renderDriveAuthorization(driveAuthorizationCoordinator.state)
         findViewById<Button>(R.id.diagnostic_export).setOnClickListener {
             if (lastDiagnosticResult != null) {
@@ -132,6 +144,78 @@ class MainActivity : ComponentActivity() {
             state == DriveAuthorizationState.UserActionRequired
         findViewById<Button>(R.id.drive_reconnect).visibility = if (connected) View.VISIBLE else View.GONE
         findViewById<Button>(R.id.drive_disconnect).visibility = if (connected) View.VISIBLE else View.GONE
+        val isDriveConnected = state is DriveAuthorizationState.Connected
+        findViewById<Button>(R.id.drive_export_now).visibility = if (isDriveConnected) View.VISIBLE else View.GONE
+    }
+
+    private fun triggerDriveExport() {
+        val client = healthConnectClient
+        if (client == null) {
+            findViewById<TextView>(R.id.drive_export_status).text =
+                getString(R.string.drive_export_health_connect_not_ready)
+            return
+        }
+        val state = driveAuthorizationCoordinator.state
+        if (state !is DriveAuthorizationState.Connected) {
+            findViewById<TextView>(R.id.drive_export_status).text =
+                getString(R.string.drive_export_not_connected)
+            return
+        }
+
+        findViewById<TextView>(R.id.drive_export_status).text = getString(R.string.drive_export_status_exporting)
+        findViewById<Button>(R.id.drive_export_now).isEnabled = false
+
+        lifecycleScope.launch {
+            try {
+                val gateway = googleDriveGatewayFactory(this@MainActivity, state.accountId)
+                val destination = GoogleDriveDestination(driveGateway = gateway)
+                val stateStore = SharedPreferencesExportStateStore(this@MainActivity)
+                val recordReader = HealthConnectExportReader(client)
+                val coordinator = ExportCoordinator(
+                    stateStore = stateStore,
+                    recordReader = recordReader,
+                    destination = destination,
+                )
+
+                val result = coordinator.export()
+                val statusView = findViewById<TextView>(R.id.drive_export_status)
+                when (result) {
+                    is ExportCycleResult.Success -> {
+                        statusView.text = getString(
+                            R.string.drive_export_status_success,
+                            result.batch.header.batchId,
+                            result.batch.header.recordCount,
+                        )
+                    }
+                    is ExportCycleResult.NothingToExport -> {
+                        statusView.text = getString(R.string.drive_export_status_nothing)
+                    }
+                    is ExportCycleResult.RetryableFailure -> {
+                        statusView.text = getString(R.string.drive_export_status_failure, result.message)
+                    }
+                    is ExportCycleResult.TerminalFailure -> {
+                        statusView.text = getString(R.string.drive_export_status_failure, result.message)
+                        if (result.userActionRequired) {
+                            driveAuthorizationCoordinator.observeAuthorizationRequired()
+                        }
+                    }
+                }
+            } catch (cancellation: kotlinx.coroutines.CancellationException) {
+                throw cancellation
+            } catch (e: Exception) {
+                findViewById<TextView>(R.id.drive_export_status).text =
+                    getString(R.string.drive_export_status_failure, e.message ?: "Unknown error")
+            } finally {
+                findViewById<Button>(R.id.drive_export_now).isEnabled = true
+            }
+        }
+    }
+
+    private fun createGoogleDriveGateway(accountId: String?): GoogleDriveGateway {
+        return HttpGoogleDriveGateway(
+            accountId = accountId,
+            tokenProvider = { googleDriveAuthorizationGateway?.getAccessToken() },
+        )
     }
 
     private fun createGoogleDriveAuthorizationGateway(

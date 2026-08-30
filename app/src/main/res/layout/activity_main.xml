@@ -95,6 +95,21 @@
             android:text="@string/drive_disconnect"
             android:visibility="gone" />
 
+        <Button
+            android:id="@+id/drive_export_now"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/drive_export_now"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/drive_export_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:accessibilityLiveRegion="polite" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
