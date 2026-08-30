@@ -62,6 +62,7 @@ dependencies {
     implementation("androidx.health.connect:connect-client:1.1.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
     implementation("com.google.code.gson:gson:2.13.2")
+    implementation("com.google.android.gms:play-services-auth:21.4.0")
 
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 

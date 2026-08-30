@@ -140,6 +140,33 @@ class ApplicationContractTest {
         )
     }
 
+    @Test
+    fun `main layout and strings provide the version footer at the bottom of the screen`() {
+        val layout = projectDirectory.resolve("src/main/res/layout/activity_main.xml")
+        val strings = projectDirectory.resolve("src/main/res/values/strings.xml")
+
+        assertTrue("activity_main.xml must exist", Files.isRegularFile(layout))
+        assertTrue("strings.xml must exist", Files.isRegularFile(strings))
+
+        val stringDocument = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(strings.toFile())
+        val stringNodes = stringDocument.getElementsByTagName("string")
+        val values = (0 until stringNodes.length)
+            .map { stringNodes.item(it) }
+            .associate { it.attributes.getNamedItem("name").nodeValue to it.textContent }
+
+        assertEquals("Version %1\$s", values["app_version"])
+
+        val layoutDocument = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(layout.toFile())
+        val linearLayout = layoutDocument.getElementsByTagName("LinearLayout").item(0)
+        val childNodes = (0 until linearLayout.childNodes.length)
+            .map { linearLayout.childNodes.item(it) }
+            .filter { it.nodeType == org.w3c.dom.Node.ELEMENT_NODE }
+
+        val lastChild = childNodes.last()
+        assertEquals("TextView", lastChild.nodeName)
+        assertEquals("@+id/app_version", lastChild.attributes.getNamedItem("android:id")?.nodeValue)
+    }
+
     private fun org.w3c.dom.NodeList.asSequence(): Sequence<org.w3c.dom.Node> = sequence {
         for (index in 0 until length) yield(item(index))
     }
