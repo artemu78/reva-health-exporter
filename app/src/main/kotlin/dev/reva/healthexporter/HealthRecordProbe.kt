@@ -177,7 +177,7 @@ class HealthRecordProbe(
                     ),
                 )
                 records += response.records
-                pageToken = response.pageToken
+                pageToken = response.pageToken?.takeIf(String::isNotEmpty)
                 if (pageToken != null && !seenPageTokens.add(pageToken)) {
                     return records.toSummary(
                         metric,

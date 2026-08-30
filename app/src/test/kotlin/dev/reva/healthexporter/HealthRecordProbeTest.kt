@@ -136,6 +136,30 @@ class HealthRecordProbeTest {
     }
 
     @Test
+    fun blankTerminalPageTokenKeepsSuccessfulPageAvailable() = runBlocking {
+        val client = FakeHealthConnectClient()
+        var stepsCalls = 0
+        client.overrides.readRecords = Stub { request ->
+            if (request.recordType != StepsRecord::class) return@Stub null
+            stepsCalls += 1
+            if (stepsCalls > 1) throw IOException("blank token is not a next page")
+            ReadRecordsResponse(
+                records = listOf(steps("2026-08-29T08:00:00Z", "2026-08-29T08:15:00Z")),
+                pageToken = "",
+            )
+        }
+
+        val summary = HealthRecordProbe(client)
+            .probe(window, allPermissions)
+            .summaries
+            .getValue(HealthMetric.STEPS)
+
+        assertEquals(MetricProbeStatus.POPULATED, summary.status)
+        assertEquals(1, summary.count)
+        assertEquals(1, stepsCalls)
+    }
+
+    @Test
     fun failedPageKeepsEarlierPageMetadata() = runBlocking {
         val client = FakeHealthConnectClient()
         client.overrides.readRecords = Stub { request ->
