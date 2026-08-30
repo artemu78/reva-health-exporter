@@ -127,6 +127,24 @@ class BackgroundProbeWorkerTest {
     }
 
     @Test
+    fun providerUnavailableDuringInitializationReturnsFailureWithUnsupportedOutcome() = runBlocking {
+        BackgroundProbeWorker.clientFactory = {
+            throw IllegalStateException("Health Connect is not available on this device")
+        }
+
+        val result = BackgroundProbeWorker.execute()
+
+        assertTrue(result is ListenableWorker.Result.Failure)
+        val failureResult = result as ListenableWorker.Result.Failure
+        assertEquals(BackgroundReadOutcome.UNSUPPORTED.name, failureResult.outputData.getString(BackgroundProbeWorker.KEY_OUTCOME))
+
+        val saved = inMemoryStore.loadSummary()
+        assertNotNull(saved)
+        assertEquals(BackgroundReadOutcome.UNSUPPORTED, saved!!.outcome)
+        assertTrue(saved.message.contains("unavailable", ignoreCase = true))
+    }
+
+    @Test
     fun backgroundExecutionNeverLaunchesInteractiveUi() = runBlocking {
         // Invariant: The worker execution path operates strictly via worker result/data
         // and does not invoke any UI or Activity intents.

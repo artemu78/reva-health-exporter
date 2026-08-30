@@ -3,6 +3,7 @@ package dev.reva.healthexporter
 import android.content.Context
 import android.widget.Button
 import android.widget.TextView
+import androidx.health.connect.client.testing.FakeHealthConnectClient
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -49,6 +50,7 @@ class BackgroundHealthConnectUiTest {
                 val trigger = activity.findViewById<Button>(R.id.background_probe_trigger)
                 val result = activity.findViewById<TextView>(R.id.background_probe_result)
 
+                assertNotNull(title)
                 assertNotNull(status)
                 assertNotNull(trigger)
                 assertNotNull(result)
@@ -63,12 +65,26 @@ class BackgroundHealthConnectUiTest {
 
     @Test
     fun worker_executes_with_workmanager_test_builder() = runBlocking {
+        val client = FakeHealthConnectClient()
+        BackgroundProbeWorker.clientFactory = { client }
+
         val context = ApplicationProvider.getApplicationContext<Context>()
         val worker = TestListenableWorkerBuilder<BackgroundProbeWorker>(context).build()
 
         val result = worker.doWork()
         assertNotNull(result)
-        // With default FakeHealthConnectClient (or real provider without extra records), execution completes
+        assertTrue(result is ListenableWorker.Result.Success)
+    }
+
+    @Test
+    fun worker_handles_unsupported_provider_gracefully() = runBlocking {
+        BackgroundProbeWorker.clientFactory = null
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val worker = TestListenableWorkerBuilder<BackgroundProbeWorker>(context).build()
+
+        val result = worker.doWork()
+        assertNotNull(result)
         assertTrue(result is ListenableWorker.Result.Success || result is ListenableWorker.Result.Failure)
     }
 

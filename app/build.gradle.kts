@@ -76,4 +76,8 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit-ktx:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.work:work-testing:2.10.0")
+    androidTestImplementation("androidx.health.connect:connect-testing:1.0.0-alpha03") {
+        exclude(group = "androidx.health.connect", module = "connect-client")
+        exclude(group = "androidx.health.connect", module = "connect-client-proto")
+    }
 }

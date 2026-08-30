@@ -56,10 +56,36 @@ class BackgroundProbeWorker(
             val now = clock.now(zoneId)
             val window = ProbeTimeWindow.previousLocalDays(now, days = 1)
 
-            val client = when {
-                clientFactory != null -> clientFactory(context)
-                context != null -> HealthConnectClient.getOrCreate(context)
-                else -> error("Context or clientFactory must be provided")
+            val client = try {
+                when {
+                    clientFactory != null -> clientFactory(context)
+                    context != null -> HealthConnectClient.getOrCreate(context)
+                    else -> error("Context or clientFactory must be provided")
+                }
+            } catch (e: Exception) {
+                val summary = BackgroundReadExecutionSummary(
+                    outcome = BackgroundReadOutcome.UNSUPPORTED,
+                    message = "Health Connect is unavailable on this device: ${e.message ?: "provider missing"}",
+                    totalRecords = 0,
+                    readTypesCount = 0,
+                    executionTimestamp = now.toInstant(),
+                    dataOrigins = emptySet(),
+                )
+                val store = when {
+                    storeFactory != null -> storeFactory(context)
+                    context != null -> SharedPreferencesBackgroundProbeStore(context)
+                    else -> null
+                }
+                store?.saveSummary(summary)
+                val outputData = workDataOf(
+                    KEY_OUTCOME to summary.outcome.name,
+                    KEY_MESSAGE to summary.message,
+                    KEY_TOTAL_RECORDS to 0,
+                    KEY_READ_TYPES_COUNT to 0,
+                    KEY_EXECUTION_TIME to summary.executionTimestamp?.toString(),
+                    KEY_DATA_ORIGINS to emptyArray<String>(),
+                )
+                return Result.failure(outputData)
             }
 
             val reader = readerFactory?.invoke(client)
