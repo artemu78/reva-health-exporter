@@ -173,4 +173,70 @@ class ExportStateStoreTest {
         sharedPrefs.edit().putString("pending_export_batch_ndjson", "invalid ndjson line 1\ninvalid line 2").apply()
         assertNull("Corrupt pending batch should safely return null", store.getPendingBatch())
     }
+
+    @Test
+    fun executionSummarySerializationRoundTrip() {
+        val summary = ExportExecutionSummary(
+            outcome = ExportOutcome.SUCCESS,
+            batchId = "batch-100",
+            recordCount = 42,
+            executionTimestamp = Instant.parse("2026-08-30T12:00:00Z"),
+            message = "Successfully exported batch batch-100 (42 records)",
+            destinationLocation = "https://drive.google.com/file/123",
+        )
+        val json = serializeExportExecutionSummary(summary)
+        val deserialized = deserializeExportExecutionSummary(json)
+        assertEquals(summary, deserialized)
+    }
+
+    @Test
+    fun executionSummaryDeserializationHandlesCorruptJsonSafely() {
+        assertNull(deserializeExportExecutionSummary("{ malformed json }"))
+        assertNull(deserializeExportExecutionSummary(""))
+        assertNull(deserializeExportExecutionSummary("   "))
+        assertNull(deserializeExportExecutionSummary("""{"outcome": "UNKNOWN_OUTCOME"}"""))
+        assertNull(deserializeExportExecutionSummary("""{"outcome": "SUCCESS", "executionTimestamp": "not-a-date"}"""))
+    }
+
+    @Test
+    fun inMemoryStoreManagesExecutionSummary() {
+        val store = InMemoryExportStateStore()
+        assertNull(store.getLastExecutionSummary())
+
+        val summary = ExportExecutionSummary(
+            outcome = ExportOutcome.SUCCESS,
+            batchId = "batch-mem-01",
+            recordCount = 5,
+            executionTimestamp = Instant.parse("2026-08-30T12:00:00Z"),
+            message = "Success",
+        )
+        store.saveExecutionSummary(summary)
+        assertEquals(summary, store.getLastExecutionSummary())
+
+        store.clear()
+        assertNull(store.getLastExecutionSummary())
+    }
+
+    @Test
+    fun sharedPreferencesStorePersistsExecutionSummaryAcrossInstances() {
+        val sharedPrefs = FakeSharedPreferences()
+        val store1 = SharedPreferencesExportStateStore(preferences = sharedPrefs)
+
+        val summary = ExportExecutionSummary(
+            outcome = ExportOutcome.RETRYABLE_FAILURE,
+            batchId = "batch-retry-01",
+            recordCount = 10,
+            executionTimestamp = Instant.parse("2026-08-30T12:00:00Z"),
+            message = "Transient server error 503",
+        )
+        store1.saveExecutionSummary(summary)
+
+        val store2 = SharedPreferencesExportStateStore(preferences = sharedPrefs)
+        assertEquals(summary, store2.getLastExecutionSummary())
+
+        // Corrupt summary in prefs
+        sharedPrefs.edit().putString("last_export_execution_summary_json", "broken json").apply()
+        assertNull(store2.getLastExecutionSummary())
+    }
 }
+

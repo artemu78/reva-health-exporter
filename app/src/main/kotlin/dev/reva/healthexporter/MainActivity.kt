@@ -146,6 +146,13 @@ class MainActivity : ComponentActivity() {
         findViewById<Button>(R.id.drive_disconnect).visibility = if (connected) View.VISIBLE else View.GONE
         val isDriveConnected = state is DriveAuthorizationState.Connected
         findViewById<Button>(R.id.drive_export_now).visibility = if (isDriveConnected) View.VISIBLE else View.GONE
+
+        if (state is DriveAuthorizationState.Connected) {
+            ExportScheduler.schedulePeriodicExport(this)
+        } else if (state == DriveAuthorizationState.Disconnected) {
+            ExportScheduler.cancelPeriodicExport(this)
+        }
+        renderExportStatus()
     }
 
     private fun triggerDriveExport() {
@@ -165,48 +172,50 @@ class MainActivity : ComponentActivity() {
         findViewById<TextView>(R.id.drive_export_status).text = getString(R.string.drive_export_status_exporting)
         findViewById<Button>(R.id.drive_export_now).isEnabled = false
 
-        lifecycleScope.launch {
-            try {
-                val gateway = googleDriveGatewayFactory(this@MainActivity, state.accountId)
-                val destination = GoogleDriveDestination(driveGateway = gateway)
-                val stateStore = SharedPreferencesExportStateStore(this@MainActivity)
-                val recordReader = HealthConnectExportReader(client)
-                val coordinator = ExportCoordinator(
-                    stateStore = stateStore,
-                    recordReader = recordReader,
-                    destination = destination,
-                )
+        ExportWorker.destinationFactory = {
+            val gateway = googleDriveGatewayFactory(this, state.accountId)
+            GoogleDriveDestination(driveGateway = gateway)
+        }
+        ExportWorker.clientFactory = { client }
 
-                val result = coordinator.export()
-                val statusView = findViewById<TextView>(R.id.drive_export_status)
-                when (result) {
-                    is ExportCycleResult.Success -> {
-                        statusView.text = getString(
-                            R.string.drive_export_status_success,
-                            result.batch.header.batchId,
-                            result.batch.header.recordCount,
-                        )
+        val workId = ExportScheduler.triggerImmediateExport(this, androidx.work.ExistingWorkPolicy.REPLACE)
+        androidx.work.WorkManager.getInstance(this)
+            .getWorkInfoByIdLiveData(workId)
+            .observe(this) { workInfo ->
+                if (workInfo != null && workInfo.state.isFinished) {
+                    findViewById<Button>(R.id.drive_export_now).isEnabled = true
+                    val outcomeName = workInfo.outputData.getString(ExportWorker.KEY_OUTCOME)
+                    if (outcomeName == ExportOutcome.USER_ACTION_REQUIRED.name) {
+                        driveAuthorizationCoordinator.observeAuthorizationRequired()
                     }
-                    is ExportCycleResult.NothingToExport -> {
-                        statusView.text = getString(R.string.drive_export_status_nothing)
-                    }
-                    is ExportCycleResult.RetryableFailure -> {
-                        statusView.text = getString(R.string.drive_export_status_failure, result.message)
-                    }
-                    is ExportCycleResult.TerminalFailure -> {
-                        statusView.text = getString(R.string.drive_export_status_failure, result.message)
-                        if (result.userActionRequired) {
-                            driveAuthorizationCoordinator.observeAuthorizationRequired()
-                        }
-                    }
+                    renderExportStatus()
                 }
-            } catch (cancellation: kotlinx.coroutines.CancellationException) {
-                throw cancellation
-            } catch (e: Exception) {
-                findViewById<TextView>(R.id.drive_export_status).text =
-                    getString(R.string.drive_export_status_failure, e.message ?: "Unknown error")
-            } finally {
-                findViewById<Button>(R.id.drive_export_now).isEnabled = true
+            }
+    }
+
+    private fun renderExportStatus() {
+        val statusView = findViewById<TextView>(R.id.drive_export_status)
+        val stateStore = SharedPreferencesExportStateStore(this)
+        val lastSummary = stateStore.getLastExecutionSummary()
+        if (lastSummary != null) {
+            statusView.text = when (lastSummary.outcome) {
+                ExportOutcome.SUCCESS -> getString(
+                    R.string.drive_export_status_success,
+                    lastSummary.batchId.orEmpty(),
+                    lastSummary.recordCount,
+                )
+                ExportOutcome.NOTHING_TO_EXPORT -> getString(R.string.drive_export_status_nothing)
+                ExportOutcome.RETRYABLE_FAILURE,
+                ExportOutcome.TERMINAL_FAILURE,
+                ExportOutcome.USER_ACTION_REQUIRED,
+                -> getString(R.string.drive_export_status_failure, lastSummary.message)
+            }
+        } else {
+            val state = driveAuthorizationCoordinator.state
+            if (state is DriveAuthorizationState.Connected) {
+                statusView.text = getString(R.string.drive_export_status_periodic_scheduled)
+            } else {
+                statusView.text = ""
             }
         }
     }
@@ -229,6 +238,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshHealthConnectState()
+        renderExportStatus()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

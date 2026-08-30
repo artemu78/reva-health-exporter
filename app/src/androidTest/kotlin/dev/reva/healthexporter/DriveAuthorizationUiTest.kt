@@ -6,6 +6,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -113,10 +114,44 @@ class DriveAuthorizationUiTest {
 
                 activity.findViewById<Button>(R.id.drive_connect).performClick()
                 assertEquals(android.view.View.VISIBLE, activity.findViewById<Button>(R.id.drive_export_now).visibility)
+                assertEquals(
+                    "Periodic export is scheduled.",
+                    activity.findViewById<TextView>(R.id.drive_export_status).text.toString(),
+                )
 
                 activity.findViewById<Button>(R.id.drive_disconnect).performClick()
                 assertEquals(android.view.View.GONE, activity.findViewById<Button>(R.id.drive_export_now).visibility)
             }
         }
     }
+
+    @Test
+    fun last_export_summary_is_rendered_in_ui() {
+        val gateway = FakeGateway()
+        MainActivity.driveAuthorizationGatewayFactory = { _, _ -> gateway }
+
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = SharedPreferencesExportStateStore(context)
+        store.saveExecutionSummary(
+            ExportExecutionSummary(
+                outcome = ExportOutcome.SUCCESS,
+                batchId = "batch-ui-100",
+                recordCount = 42,
+                executionTimestamp = java.time.Instant.parse("2026-08-30T12:00:00Z"),
+                message = "Exported batch batch-ui-100 (42 records) to Google Drive.",
+            ),
+        )
+
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val statusView = activity.findViewById<TextView>(R.id.drive_export_status)
+                val text = statusView.text.toString()
+                assertTrue(text.contains("batch-ui-100"))
+                assertTrue(text.contains("42"))
+            }
+        }
+
+        store.clear()
+    }
 }
+
