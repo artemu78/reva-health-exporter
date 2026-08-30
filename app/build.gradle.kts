@@ -23,6 +23,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("androidx.health.connect:connect-testing:1.0.0-alpha03") {
+        exclude(group = "androidx.health.connect", module = "connect-client")
+        exclude(group = "androidx.health.connect", module = "connect-client-proto")
+    }
 
     androidTestImplementation("androidx.test:core-ktx:1.7.0")
     androidTestImplementation("androidx.test.ext:junit-ktx:1.3.0")
