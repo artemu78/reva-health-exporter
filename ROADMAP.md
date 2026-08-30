@@ -206,14 +206,14 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 
 **Acceptance criteria:**
 
-- [ ] A small `ExportDestination` boundary separates storage from Health Connect reads.
-- [ ] Export batches are immutable and have stable identities.
-- [ ] Pending batches and the last confirmed checkpoint persist locally.
-- [ ] The checkpoint advances only after durable destination success.
-- [ ] `LocalFileDestination` writes a valid batch.
-- [ ] A simulated failure followed by retry reuses the same batch identity.
-- [ ] Restarting between creation and confirmation does not lose the pending batch.
-- [ ] Tests cover duplicate records and exact time-window boundaries.
+- [x] A small `ExportDestination` boundary separates storage from Health Connect reads.
+- [x] Export batches are immutable and have stable identities.
+- [x] Pending batches and the last confirmed checkpoint persist locally.
+- [x] The checkpoint advances only after durable destination success.
+- [x] `LocalFileDestination` writes a valid batch.
+- [x] A simulated failure followed by retry reuses the same batch identity.
+- [x] Restarting between creation and confirmation does not lose the pending batch.
+- [x] Tests cover duplicate records and exact time-window boundaries.
 
 ## Milestone: Google Drive
 
