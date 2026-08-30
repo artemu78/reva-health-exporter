@@ -64,3 +64,16 @@ rg -n -i 'client_secret|access_token|refresh_token|AIza[0-9A-Za-z_-]{30,}' \
 
 The two-account phone test and revocation test remain `UNVERIFIED` until executed on the target Android
 11 phone. Record only pass/fail states; do not capture account names, tokens, or personal Drive data.
+
+## Physical-phone regression observed on 2026-08-30
+
+On the target phone, authorization returned immediately without showing consent UI and the app displayed
+the reconnect-required state. This is compatible with Google returning an already-granted narrow scope
+without account identity, which the original code incorrectly treated as denied. Disconnect also
+terminated the visible activity before a device crash trace could be captured.
+
+The defensive correction accepts an already-granted `drive.file` result even when Google omits account
+identity, while retaining a nullable account key so no destination can be associated with an unknown
+account. Disconnect now waits for the asynchronous revocation result and converts both synchronous and
+asynchronous failures to a recoverable reconnect-required state. Automated JVM and API 30 UI regression
+tests cover both behaviors. Repeating both actions on the physical phone remains `UNVERIFIED`.

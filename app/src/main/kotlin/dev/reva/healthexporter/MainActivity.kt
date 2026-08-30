@@ -122,6 +122,7 @@ class MainActivity : ComponentActivity() {
             DriveAuthorizationState.Disconnected -> getString(R.string.drive_disconnected)
             DriveAuthorizationState.Connecting -> getString(R.string.drive_connecting)
             is DriveAuthorizationState.Connected -> getString(R.string.drive_connected)
+            DriveAuthorizationState.Disconnecting -> getString(R.string.drive_disconnecting)
             DriveAuthorizationState.UserActionRequired -> getString(R.string.drive_user_action_required)
         }
         findViewById<Button>(R.id.drive_connect).visibility =

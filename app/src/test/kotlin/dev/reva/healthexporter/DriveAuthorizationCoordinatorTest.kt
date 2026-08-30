@@ -9,13 +9,17 @@ class DriveAuthorizationCoordinatorTest {
     private class FakeGateway : DriveAuthorizationGateway {
         var launchCount = 0
         var disconnectCount = 0
+        var disconnectCompletion: ((DriveDisconnectionResult) -> Unit)? = null
+        var disconnectError: Exception? = null
 
         override fun launchAuthorization() {
             launchCount += 1
         }
 
-        override fun disconnect() {
+        override fun disconnect(onComplete: (DriveDisconnectionResult) -> Unit) {
             disconnectCount += 1
+            disconnectError?.let { throw it }
+            disconnectCompletion = onComplete
         }
     }
 
@@ -70,7 +74,31 @@ class DriveAuthorizationCoordinatorTest {
 
         coordinator.disconnect()
         assertEquals(1, gateway.disconnectCount)
+        assertEquals(DriveAuthorizationState.Disconnecting, coordinator.state)
+
+        gateway.disconnectCompletion?.invoke(DriveDisconnectionResult.Disconnected)
         assertEquals(DriveAuthorizationState.Disconnected, coordinator.state)
+    }
+
+    @Test
+    fun `successful narrow authorization without account identity remains connected`() {
+        val (coordinator, _) = coordinator()
+
+        coordinator.connect()
+        coordinator.complete(DriveAuthorizationResult.Authorized(accountId = null))
+
+        assertEquals(DriveAuthorizationState.Connected(accountId = null), coordinator.state)
+    }
+
+    @Test
+    fun `disconnect failure remains recoverable instead of escaping to the activity`() {
+        val (coordinator, gateway) = coordinator()
+        coordinator.complete(DriveAuthorizationResult.Authorized("account-a"))
+        gateway.disconnectError = IllegalStateException("synthetic revocation failure")
+
+        coordinator.disconnect()
+
+        assertEquals(DriveAuthorizationState.UserActionRequired, coordinator.state)
     }
 
     @Test

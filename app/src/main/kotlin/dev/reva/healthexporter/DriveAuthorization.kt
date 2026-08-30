@@ -10,20 +10,26 @@ object DriveAuthorizationScopes {
 sealed interface DriveAuthorizationState {
     data object Disconnected : DriveAuthorizationState
     data object Connecting : DriveAuthorizationState
-    data class Connected(val accountId: String) : DriveAuthorizationState
+    data class Connected(val accountId: String?) : DriveAuthorizationState
+    data object Disconnecting : DriveAuthorizationState
     data object UserActionRequired : DriveAuthorizationState
 }
 
 sealed interface DriveAuthorizationResult {
-    data class Authorized(val accountId: String) : DriveAuthorizationResult
+    data class Authorized(val accountId: String?) : DriveAuthorizationResult
     data object Cancelled : DriveAuthorizationResult
     data object Denied : DriveAuthorizationResult
     data object Revoked : DriveAuthorizationResult
 }
 
+sealed interface DriveDisconnectionResult {
+    data object Disconnected : DriveDisconnectionResult
+    data object Failed : DriveDisconnectionResult
+}
+
 interface DriveAuthorizationGateway {
     fun launchAuthorization()
-    fun disconnect()
+    fun disconnect(onComplete: (DriveDisconnectionResult) -> Unit)
 }
 
 class DriveAuthorizationCoordinator(
@@ -58,8 +64,19 @@ class DriveAuthorizationCoordinator(
     }
 
     fun disconnect() {
-        gateway.disconnect()
-        update(DriveAuthorizationState.Disconnected)
+        update(DriveAuthorizationState.Disconnecting)
+        try {
+            gateway.disconnect { result ->
+                update(
+                    when (result) {
+                        DriveDisconnectionResult.Disconnected -> DriveAuthorizationState.Disconnected
+                        DriveDisconnectionResult.Failed -> DriveAuthorizationState.UserActionRequired
+                    },
+                )
+            }
+        } catch (_: Exception) {
+            update(DriveAuthorizationState.UserActionRequired)
+        }
     }
 
     private fun launch() {

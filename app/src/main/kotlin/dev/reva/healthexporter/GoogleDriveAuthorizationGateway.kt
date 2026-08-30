@@ -44,9 +44,15 @@ class GoogleDriveAuthorizationGateway(
         }
     }
 
-    override fun disconnect() {
-        val request = RevokeAccessRequest.builder().setScopes(scopes).build()
-        client.revokeAccess(request)
+    override fun disconnect(onComplete: (DriveDisconnectionResult) -> Unit) {
+        try {
+            val request = RevokeAccessRequest.builder().setScopes(scopes).build()
+            client.revokeAccess(request)
+                .addOnSuccessListener { onComplete(DriveDisconnectionResult.Disconnected) }
+                .addOnFailureListener { onComplete(DriveDisconnectionResult.Failed) }
+        } catch (_: Exception) {
+            onComplete(DriveDisconnectionResult.Failed)
+        }
     }
 
     private fun handleResult(result: AuthorizationResult) {
@@ -65,11 +71,7 @@ class GoogleDriveAuthorizationGateway(
         }
         val account = result.toGoogleSignInAccount()
         val accountIdentity = account?.id ?: account?.account?.name
-        if (accountIdentity == null) {
-            onComplete(DriveAuthorizationResult.Denied)
-            return
-        }
-        onComplete(DriveAuthorizationResult.Authorized(hashAccountIdentity(accountIdentity)))
+        onComplete(DriveAuthorizationResult.Authorized(accountIdentity?.let(::hashAccountIdentity)))
     }
 
     private fun classifyFailure(error: Exception): DriveAuthorizationResult =

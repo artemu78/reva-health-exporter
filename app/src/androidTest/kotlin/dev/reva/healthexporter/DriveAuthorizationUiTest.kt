@@ -19,7 +19,10 @@ class DriveAuthorizationUiTest {
             launches += 1
             onLaunch?.invoke()
         }
-        override fun disconnect() { disconnects += 1 }
+        override fun disconnect(onComplete: (DriveDisconnectionResult) -> Unit) {
+            disconnects += 1
+            onComplete(DriveDisconnectionResult.Disconnected)
+        }
     }
 
     @After
@@ -61,6 +64,36 @@ class DriveAuthorizationUiTest {
                 activity.findViewById<Button>(R.id.drive_disconnect).performClick()
                 assertEquals(2, gateway.launches)
                 assertEquals(1, gateway.disconnects)
+            }
+        }
+    }
+
+    @Test
+    fun disconnect_failure_keeps_the_activity_open_with_a_recovery_action() {
+        lateinit var completeAuthorization: (DriveAuthorizationResult) -> Unit
+        val gateway = object : DriveAuthorizationGateway {
+            override fun launchAuthorization() {
+                completeAuthorization(DriveAuthorizationResult.Authorized(accountId = null))
+            }
+
+            override fun disconnect(onComplete: (DriveDisconnectionResult) -> Unit) {
+                onComplete(DriveDisconnectionResult.Failed)
+            }
+        }
+        MainActivity.driveAuthorizationGatewayFactory = { _, complete ->
+            completeAuthorization = complete
+            gateway
+        }
+
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.findViewById<Button>(R.id.drive_connect).performClick()
+                activity.findViewById<Button>(R.id.drive_disconnect).performClick()
+
+                assertEquals(
+                    "Google Drive access needs your attention. Reconnect to continue.",
+                    activity.findViewById<TextView>(R.id.drive_authorization_status).text.toString(),
+                )
             }
         }
     }

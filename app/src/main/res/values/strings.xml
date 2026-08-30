@@ -24,6 +24,7 @@
     <string name="drive_disconnected">Google Drive is not connected.</string>
     <string name="drive_connecting">Connecting Google Drive…</string>
     <string name="drive_connected">Google Drive is connected.</string>
+    <string name="drive_disconnecting">Disconnecting Google Drive…</string>
     <string name="drive_user_action_required">Google Drive access needs your attention. Reconnect to continue.</string>
     <string name="drive_connect">Connect Google Drive</string>
     <string name="drive_reconnect">Reconnect Google Drive</string>
