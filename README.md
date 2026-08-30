@@ -79,7 +79,10 @@ Run the launch test on an Android 11 (API 30) device or emulator:
 
 GitHub Actions runs the fast checks, the 90% line/85% branch coverage gate for the critical pure
 Kotlin export coordinator, and API 30 instrumentation in separate clean jobs. Build reports and
-the debug APK are retained as workflow artifacts. Before a personal release, run the complete
+the debug APK are retained in the explicitly named `debug-fast-check-results` artifact. That debug
+APK is not a Google-enabled release candidate because its hosted-runner signing certificate is not
+stable. For device acceptance, download only the `signed-release-candidate-v<version>` artifact,
+which is built from the repository's permanent signing secrets. Before a personal release, run the complete
 [Android 11 acceptance protocol](docs/issue-13-release-acceptance.md).
 
 ## Versioned signed releases

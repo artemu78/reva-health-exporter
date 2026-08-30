@@ -16,7 +16,10 @@ From a clean checkout, with JDK 17 and Android SDK platform 36 installed, run:
 The command runs the JVM suite, lint and debug assembly; independently validates schema-v1
 fixtures; scans tracked files for key and credential material; creates an ephemeral test key;
 builds a signed, minified release APK; and verifies its signature and manifest version. The
-ephemeral APK proves the release build contract but is not the personal distribution build.
+ephemeral APK proves the release build contract but is not the personal distribution build. It is
+deleted automatically when the command finishes. Never install an APK from
+`debug-fast-check-results`; GitHub-hosted runners use a non-permanent debug certificate. Use only
+the `signed-release-candidate-v<version>` artifact for physical Google authorization checks.
 
 CI additionally runs `connectedDebugAndroidTest` on an API 30 emulator. Record the clean CI
 run URL and test counts below before release.

@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -33,13 +34,74 @@ jobs:
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
-          name: fast-check-results
+          name: debug-fast-check-results
           if-no-files-found: ignore
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/reports/
             app/build/test-results/
             app/build/reports/kover/
+
+  signed-release-candidate:
+    name: Permanently signed release candidate
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2 # v5
+      - name: Restore permanent release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" ]]; then
+            echo "ANDROID_KEYSTORE_BASE64 is not configured"
+            exit 1
+          fi
+          printf %s "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          chmod 600 "$RUNNER_TEMP/release.jks"
+      - name: Build permanently signed candidate
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for secret_name in ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "$secret_name is not configured"
+              exit 1
+            fi
+          done
+          ./gradlew test lintRelease assembleRelease
+      - name: Verify and name candidate
+        id: candidate
+        run: |
+          version_name=$(awk -F= '$1 == "VERSION_NAME" { print $2 }' version.properties)
+          apk_name="reva-health-exporter-v${version_name}-signed.apk"
+          build_tools_dir=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          "$build_tools_dir/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+          "$build_tools_dir/aapt2" dump badging app/build/outputs/apk/release/app-release.apk | head -1
+          cp app/build/outputs/apk/release/app-release.apk "$apk_name"
+          sha256sum "$apk_name" > "$apk_name.sha256"
+          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$apk_name" >> "$GITHUB_OUTPUT"
+      - name: Upload permanently signed candidate
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: signed-release-candidate-v${{ steps.candidate.outputs.version_name }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            ${{ steps.candidate.outputs.apk_name }}
+            ${{ steps.candidate.outputs.apk_name }}.sha256
 
   api-30-instrumentation:
     name: API 30 launch test

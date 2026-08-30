@@ -107,6 +107,19 @@ class ApplicationContractTest {
     }
 
     @Test
+    fun `only permanently signed workflow artifacts are presented as installable candidates`() {
+        val ciWorkflow = projectDirectory.resolve("../.github/workflows/android.yml").normalize().readText()
+        val releaseVerifier = projectDirectory.resolve("../scripts/verify-release-build.sh").normalize().readText()
+
+        assertTrue(ciWorkflow.contains("name: debug-fast-check-results"))
+        assertTrue(ciWorkflow.contains("workflow_dispatch:"))
+        assertTrue(ciWorkflow.contains("name: signed-release-candidate-"))
+        assertTrue(ciWorkflow.contains("ANDROID_KEYSTORE_BASE64"))
+        assertTrue(ciWorkflow.contains("github.event.pull_request.head.repo.full_name == github.repository"))
+        assertTrue(releaseVerifier.contains("rm -f \"\$apk_path\""))
+    }
+
+    @Test
     fun `manifest exposes Health Connect and declares only selected read permissions`() {
         val manifest = projectDirectory.resolve("src/main/AndroidManifest.xml")
         val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(manifest.toFile())

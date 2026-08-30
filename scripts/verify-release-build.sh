@@ -29,7 +29,12 @@ if ./gradlew -q verifyReleaseTag -PreleaseTag="v$version_name-mismatch" >/dev/nu
 fi
 
 release_test_dir=$(mktemp -d "${TMPDIR:-/tmp}/reva-release-test.XXXXXX")
-trap 'rm -rf "$release_test_dir"' EXIT
+apk_path="$project_dir/app/build/outputs/apk/release/app-release.apk"
+cleanup() {
+    rm -rf "$release_test_dir"
+    rm -f "$apk_path"
+}
+trap cleanup EXIT
 
 test_keystore="$release_test_dir/test-release.jks"
 test_password="synthetic-release-password"
@@ -52,7 +57,6 @@ export ANDROID_KEY_PASSWORD="$test_password"
 
 ./gradlew clean test lintRelease assembleRelease
 
-apk_path="$project_dir/app/build/outputs/apk/release/app-release.apk"
 if [[ ! -f "$apk_path" ]]; then
     echo "Signed release APK was not created at $apk_path"
     exit 1
