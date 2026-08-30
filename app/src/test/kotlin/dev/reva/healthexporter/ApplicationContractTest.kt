@@ -46,4 +46,35 @@ class ApplicationContractTest {
         assertTrue(configuration.contains("KERNEL==\"kvm\""))
         assertTrue(configuration.contains("./gradlew connectedDebugAndroidTest"))
     }
+
+    @Test
+    fun `manifest exposes Health Connect and declares only selected read permissions`() {
+        val manifest = projectDirectory.resolve("src/main/AndroidManifest.xml")
+        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(manifest.toFile())
+        val permissionNodes = document.getElementsByTagName("uses-permission")
+        val permissions = (0 until permissionNodes.length)
+            .map { permissionNodes.item(it).attributes.getNamedItem("android:name").nodeValue }
+            .toSet()
+
+        assertEquals(
+            setOf(
+                "android.permission.health.READ_STEPS",
+                "android.permission.health.READ_HEART_RATE",
+                "android.permission.health.READ_RESTING_HEART_RATE",
+                "android.permission.health.READ_SLEEP",
+                "android.permission.health.READ_DISTANCE",
+                "android.permission.health.READ_TOTAL_CALORIES_BURNED",
+                "android.permission.health.READ_EXERCISE",
+                "android.permission.health.READ_OXYGEN_SATURATION",
+            ),
+            permissions,
+        )
+
+        val packages = document.getElementsByTagName("package")
+        assertEquals(1, packages.length)
+        assertEquals(
+            "com.google.android.apps.healthdata",
+            packages.item(0).attributes.getNamedItem("android:name").nodeValue,
+        )
+    }
 }

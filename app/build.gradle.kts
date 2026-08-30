@@ -18,6 +18,10 @@ android {
 }
 
 dependencies {
+    implementation("androidx.activity:activity-ktx:1.13.0")
+    implementation("androidx.health.connect:connect-client:1.1.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+
     testImplementation("junit:junit:4.13.2")
 
     androidTestImplementation("androidx.test:core-ktx:1.7.0")
