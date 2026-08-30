@@ -424,4 +424,70 @@ class ExportCoordinatorTest {
         assertEquals("batch-exc-001", stateStore.getPendingBatch()?.header?.batchId)
         assertNull(stateStore.getLastCheckpoint())
     }
+
+    @Test
+    fun unavailableDestinationIsRetryableWithoutReadingOrChangingState() = runBlocking {
+        destination.status = DestinationStatus.Unavailable("Offline")
+        reader.exceptionToThrow = AssertionError("reader must not run")
+
+        val result = createCoordinator().export()
+
+        assertTrue(result is ExportCycleResult.RetryableFailure)
+        assertEquals("Offline", (result as ExportCycleResult.RetryableFailure).message)
+        assertNull(stateStore.getPendingBatch())
+        assertNull(stateStore.getLastCheckpoint())
+    }
+
+    @Test
+    fun revokedHealthPermissionRequiresUserActionWithoutChangingState() = runBlocking {
+        reader.exceptionToThrow = SecurityException()
+
+        val result = createCoordinator().export()
+
+        assertTrue(result is ExportCycleResult.TerminalFailure)
+        val failure = result as ExportCycleResult.TerminalFailure
+        assertTrue(failure.userActionRequired)
+        assertTrue(failure.message.contains("permission revoked"))
+        assertNull(stateStore.getPendingBatch())
+        assertNull(stateStore.getLastCheckpoint())
+    }
+
+    @Test
+    fun nonRetryableUploadFailurePreservesPendingBatchAndCheckpoint() = runBlocking {
+        idGen.nextId = "batch-auth-revoked"
+        destination.uploadResult = UploadResult.Failure("Drive authorization revoked", isRetryable = false)
+
+        val result = createCoordinator().export()
+
+        assertTrue(result is ExportCycleResult.TerminalFailure)
+        assertEquals("batch-auth-revoked", (result as ExportCycleResult.TerminalFailure).batch?.header?.batchId)
+        assertEquals("batch-auth-revoked", stateStore.getPendingBatch()?.header?.batchId)
+        assertNull(stateStore.getLastCheckpoint())
+    }
+
+    @Test
+    fun corruptPendingStateFailsVisiblyWithoutReadingOrChangingCheckpoint() = runBlocking {
+        stateStore.failOnGetPendingBatch = IllegalStateException("corrupt pending batch")
+        reader.exceptionToThrow = AssertionError("reader must not run")
+
+        val result = createCoordinator().export()
+
+        assertTrue(result is ExportCycleResult.TerminalFailure)
+        assertTrue((result as ExportCycleResult.TerminalFailure).message.contains("corrupt pending batch"))
+        assertNull(stateStore.getLastCheckpoint())
+    }
+
+    @Test
+    fun unlimitedBatchDurationUsesCurrentTimeAsWindowEnd() = runBlocking {
+        val result = createCoordinator(
+            initialLookback = Duration.ofDays(3),
+            maxBatchDuration = null,
+        ).export()
+
+        assertTrue(result is ExportCycleResult.Success)
+        assertEquals(
+            Instant.parse("2026-08-30T12:00:00Z"),
+            (result as ExportCycleResult.Success).batch.header.timeWindow.endExclusive,
+        )
+    }
 }

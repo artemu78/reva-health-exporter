@@ -27,7 +27,37 @@ The first remote destination will be a visible folder in the user's own Google D
 
 ## Current status
 
-The diagnostic milestone is complete. The application inspects Health Connect permissions, probes candidate metrics, displays live summaries, exports sanitized snapshots, and confirms that Xiaomi Mi Fitness exposes the core Smart Band 9 metrics (steps, heart rate, distance, calories, sleep) on Android 11.
+The MVP implements diagnostics, schema-v1 local batches, Google Drive authorization/upload,
+immediate export, and WorkManager scheduling. Xiaomi Mi Fitness compatibility remains dependent
+on its version, region, phone, permissions, and synchronization state; see the linked compatibility
+report before interpreting an empty result.
+
+## Install and permissions
+
+Download the signed APK from the matching GitHub Release and verify its SHA-256 digest against
+the release evidence. On the Android 11 phone, allow installation from the app used to open the
+APK, install it, and then disable that temporary installation permission if desired. A debug-signed
+build cannot be upgraded to a release-signed build; uninstall it first. Later APKs must use the same
+release key and a higher `VERSION_CODE` to preserve local app state during upgrade.
+
+The app requests read access only for its maintained Health Connect candidate catalog. You can
+grant a subset, deny access, or revoke it later in Health Connect. Google Drive connection is
+separate and uses the narrow `drive.file` scope, which limits the app to files it created or that
+the user explicitly opened with it. Revoked permission or authorization requires user action and
+must not become an infinite background retry.
+
+Android 11 Health Connect providers may not support background reads. In that case **Export now**
+is the reliable path; periodic work cannot export data the provider refuses to expose in the
+background. Mi Fitness may publish only a subset of band metrics and must synchronize before new
+records can be exported.
+
+## Export ownership and deletion
+
+Local exports and the visible `Reva Health Exporter` folder in Google Drive belong to the user.
+Disconnecting Drive stops app access but does not delete already exported files. Delete those files
+or their folder in Drive, then empty Drive trash if permanent remote deletion is desired. To remove
+on-device checkpoints, pending batches, authorization state, and the pseudonymous installation ID,
+clear the app's storage or uninstall it. Keep any exported copies you still need before clearing data.
 
 ## Build and test
 
@@ -47,7 +77,10 @@ Run the launch test on an Android 11 (API 30) device or emulator:
 ./gradlew connectedDebugAndroidTest
 ```
 
-GitHub Actions runs the fast checks and the API 30 instrumentation test in separate clean jobs. Build reports and the debug APK are retained as workflow artifacts.
+GitHub Actions runs the fast checks, the 90% line/85% branch coverage gate for the critical pure
+Kotlin export coordinator, and API 30 instrumentation in separate clean jobs. Build reports and
+the debug APK are retained as workflow artifacts. Before a personal release, run the complete
+[Android 11 acceptance protocol](docs/issue-13-release-acceptance.md).
 
 ## Versioned signed releases
 

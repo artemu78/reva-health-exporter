@@ -66,6 +66,47 @@ class ApplicationContractTest {
     }
 
     @Test
+    fun `release acceptance has one executable repository interface`() {
+        val acceptanceScript = projectDirectory.resolve("../scripts/verify-release-acceptance.sh").normalize()
+        val acceptanceGuide = projectDirectory.resolve("../docs/issue-13-release-acceptance.md").normalize()
+
+        assertTrue("release acceptance script must exist", Files.isRegularFile(acceptanceScript))
+        assertTrue("release acceptance script must be executable", Files.isExecutable(acceptanceScript))
+        assertTrue("release acceptance guide must exist", Files.isRegularFile(acceptanceGuide))
+
+        val script = acceptanceScript.readText()
+        assertTrue(script.contains("./gradlew test lintDebug assembleDebug"))
+        assertTrue(script.contains("./scripts/verify-release-build.sh"))
+        assertTrue(script.contains("verify-schema-v1-fixtures"))
+        assertTrue(script.contains("verify-repository-privacy"))
+        assertTrue(script.contains("git grep -nI -E -e"))
+
+        val guide = acceptanceGuide.readText()
+        assertTrue(guide.contains("Clean install"))
+        assertTrue(guide.contains("Upgrade"))
+        assertTrue(guide.contains("Permission revocation"))
+        assertTrue(guide.contains("Drive revocation"))
+        assertTrue(guide.contains("Offline recovery"))
+        assertTrue(guide.contains("Account switch"))
+        assertTrue(guide.contains("Corrupt local state"))
+    }
+
+    @Test
+    fun `release acceptance enforces core line and branch coverage`() {
+        val build = projectDirectory.resolve("build.gradle.kts")
+        val workflow = projectDirectory.resolve("../.github/workflows/android.yml").normalize()
+        val acceptanceScript = projectDirectory.resolve("../scripts/verify-release-acceptance.sh").normalize()
+
+        val buildConfiguration = build.readText()
+        assertTrue(buildConfiguration.contains("CoverageUnit.LINE"))
+        assertTrue(buildConfiguration.contains("minValue = 90"))
+        assertTrue(buildConfiguration.contains("CoverageUnit.BRANCH"))
+        assertTrue(buildConfiguration.contains("minValue = 85"))
+        assertTrue(workflow.readText().contains("koverVerifyDebug"))
+        assertTrue(acceptanceScript.readText().contains("koverVerifyDebug"))
+    }
+
+    @Test
     fun `manifest exposes Health Connect and declares only selected read permissions`() {
         val manifest = projectDirectory.resolve("src/main/AndroidManifest.xml")
         val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(manifest.toFile())

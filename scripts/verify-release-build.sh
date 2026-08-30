@@ -50,11 +50,16 @@ export ANDROID_KEYSTORE_PASSWORD="$test_password"
 export ANDROID_KEY_ALIAS="reva-health-exporter-test"
 export ANDROID_KEY_PASSWORD="$test_password"
 
-./gradlew test lintRelease assembleRelease
+./gradlew clean test lintRelease assembleRelease
 
 apk_path="$project_dir/app/build/outputs/apk/release/app-release.apk"
 if [[ ! -f "$apk_path" ]]; then
     echo "Signed release APK was not created at $apk_path"
+    exit 1
+fi
+mapping_path="$project_dir/app/build/outputs/mapping/release/mapping.txt"
+if [[ ! -s "$mapping_path" ]]; then
+    echo "R8 mapping was not created at $mapping_path; the release may not be minified"
     exit 1
 fi
 
