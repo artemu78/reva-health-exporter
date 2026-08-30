@@ -49,6 +49,32 @@ Run the launch test on an Android 11 (API 30) device or emulator:
 
 GitHub Actions runs the fast checks and the API 30 instrumentation test in separate clean jobs. Build reports and the debug APK are retained as workflow artifacts.
 
+## Versioned signed releases
+
+Application versions live in `version.properties`:
+
+```properties
+VERSION_CODE=1
+VERSION_NAME=0.1.0
+```
+
+`VERSION_CODE` must increase for every APK that should update an installed version. `VERSION_NAME` is the user-visible semantic version. A release tag must match it exactly with a `v` prefix; version `0.1.0` is released from tag `v0.1.0`.
+
+Before tagging, merge the version change and all intended code into `main`, then run:
+
+```sh
+./gradlew printVersion
+./gradlew verifyReleaseTag -PreleaseTag=v0.1.0
+git tag -a v0.1.0 -m "Reva Health Exporter v0.1.0"
+git push origin v0.1.0
+```
+
+The tag starts the Android Release workflow. It restores the private signing keystore from GitHub Actions secrets, runs tests and release lint, builds a signed and minified APK, verifies its signature, and attaches it directly to the matching GitHub Release.
+
+The required repository secrets are `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Keep an offline encrypted backup of the original keystore and its passwords; GitHub does not let you recover secret values later. Never commit a keystore or credentials.
+
+The first release-signed APK cannot update a currently installed debug-signed APK. Uninstall the debug build once, accepting loss of this app's local state, and install the release APK. Later releases signed by the same key can update it normally.
+
 Start here:
 
 - [Architecture](ARCHITECTURE.md)
