@@ -6,6 +6,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ListenableWorker.Result
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -15,17 +16,7 @@ class ExportWorker(
     workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
 
-    override suspend fun doWork(): Result = execute(
-        context = applicationContext,
-        clientFactory = clientFactory,
-        destinationFactory = destinationFactory,
-        stateStoreFactory = stateStoreFactory,
-        recordReaderFactory = recordReaderFactory,
-        driveTokenProvider = driveTokenProvider,
-        clock = clock,
-        zoneId = zoneId,
-        idGenerator = idGenerator,
-    )
+    override suspend fun doWork(): Result = execute(applicationContext)
 
     companion object {
         const val KEY_OUTCOME = "outcome"
@@ -57,55 +48,15 @@ class ExportWorker(
             idGenerator = UuidGenerator
         }
 
-        suspend fun execute(
-            context: Context? = null,
-            clientFactory: ((Context?) -> HealthConnectClient)? = this.clientFactory,
-            destinationFactory: ((Context?) -> ExportDestination)? = this.destinationFactory,
-            stateStoreFactory: ((Context?) -> ExportStateStore)? = this.stateStoreFactory,
-            recordReaderFactory: ((HealthConnectClient) -> HealthExportRecordReader)? = this.recordReaderFactory,
-            driveTokenProvider: (suspend (Context?) -> String?)? = this.driveTokenProvider,
-            clock: DiagnosticClock = this.clock,
-            zoneId: ZoneId = this.zoneId,
-            idGenerator: IdGenerator = this.idGenerator,
-        ): Result = sharedExecutionLock.withLock {
+        suspend fun execute(context: Context? = null): Result = sharedExecutionLock.withLock {
             val now = clock.now(zoneId).toInstant()
-            val stateStore = when {
-                stateStoreFactory != null -> stateStoreFactory(context)
-                context != null -> SharedPreferencesExportStateStore(context)
-                else -> InMemoryExportStateStore()
-            }
+            val stateStore = resolveStateStore(context)
 
-            val client = try {
-                when {
-                    clientFactory != null -> clientFactory(context)
-                    context != null -> HealthConnectClient.getOrCreate(context)
-                    else -> error("Context or clientFactory must be provided")
-                }
-            } catch (e: Exception) {
-                val summary = ExportExecutionSummary(
-                    outcome = ExportOutcome.USER_ACTION_REQUIRED,
-                    message = "Health Connect is unavailable on this device: ${e.message ?: "provider missing"}",
-                    executionTimestamp = now,
-                )
-                stateStore.saveExecutionSummary(summary)
-                return@withLock Result.failure(createOutputData(summary))
-            }
+            val client = resolveClient(context, now, stateStore)
+                ?: return@withLock Result.failure(createOutputData(stateStore.getLastExecutionSummary()!!))
 
-            val destination = try {
-                when {
-                    destinationFactory != null -> destinationFactory(context)
-                    context != null -> defaultDestination(context, driveTokenProvider)
-                    else -> error("Context or destinationFactory must be provided")
-                }
-            } catch (e: Exception) {
-                val summary = ExportExecutionSummary(
-                    outcome = ExportOutcome.USER_ACTION_REQUIRED,
-                    message = "Failed to configure export destination: ${e.message}",
-                    executionTimestamp = now,
-                )
-                stateStore.saveExecutionSummary(summary)
-                return@withLock Result.failure(createOutputData(summary))
-            }
+            val destination = resolveDestination(context, now, stateStore)
+                ?: return@withLock Result.failure(createOutputData(stateStore.getLastExecutionSummary()!!))
 
             val recordReader = recordReaderFactory?.invoke(client)
                 ?: HealthConnectExportReader(client = client)
@@ -119,55 +70,104 @@ class ExportWorker(
                 idGenerator = idGenerator,
             )
 
-            val cycleResult = coordinator.export()
-            val summary = when (cycleResult) {
-                is ExportCycleResult.Success -> ExportExecutionSummary(
-                    outcome = ExportOutcome.SUCCESS,
-                    batchId = cycleResult.batch.header.batchId,
-                    recordCount = cycleResult.batch.header.recordCount,
-                    executionTimestamp = now,
-                    message = "Successfully exported batch ${cycleResult.batch.header.batchId} (${cycleResult.batch.header.recordCount} records)",
-                    destinationLocation = cycleResult.destinationLocation,
-                )
-                is ExportCycleResult.NothingToExport -> ExportExecutionSummary(
-                    outcome = ExportOutcome.NOTHING_TO_EXPORT,
-                    executionTimestamp = now,
-                    message = cycleResult.message,
-                )
-                is ExportCycleResult.RetryableFailure -> ExportExecutionSummary(
-                    outcome = ExportOutcome.RETRYABLE_FAILURE,
-                    batchId = cycleResult.batch?.header?.batchId,
-                    recordCount = cycleResult.batch?.header?.recordCount ?: 0,
-                    executionTimestamp = now,
-                    message = cycleResult.message,
-                )
-                is ExportCycleResult.TerminalFailure -> ExportExecutionSummary(
-                    outcome = if (cycleResult.userActionRequired) {
-                        ExportOutcome.USER_ACTION_REQUIRED
-                    } else {
-                        ExportOutcome.TERMINAL_FAILURE
-                    },
-                    batchId = cycleResult.batch?.header?.batchId,
-                    recordCount = cycleResult.batch?.header?.recordCount ?: 0,
-                    executionTimestamp = now,
-                    message = cycleResult.message,
-                )
-            }
-
+            val summary = mapCycleResultToSummary(coordinator.export(), now)
             stateStore.saveExecutionSummary(summary)
-            val outputData = createOutputData(summary)
+            return@withLock mapSummaryToWorkerResult(summary)
+        }
 
-            return@withLock when (summary.outcome) {
-                ExportOutcome.SUCCESS,
-                ExportOutcome.NOTHING_TO_EXPORT,
-                -> Result.success(outputData)
+        private fun resolveStateStore(context: Context?): ExportStateStore = when {
+            stateStoreFactory != null -> stateStoreFactory!!(context)
+            context != null -> SharedPreferencesExportStateStore(context)
+            else -> InMemoryExportStateStore()
+        }
 
-                ExportOutcome.RETRYABLE_FAILURE -> Result.retry()
-
-                ExportOutcome.USER_ACTION_REQUIRED,
-                ExportOutcome.TERMINAL_FAILURE,
-                -> Result.failure(outputData)
+        private fun resolveClient(
+            context: Context?,
+            now: Instant,
+            stateStore: ExportStateStore,
+        ): HealthConnectClient? = try {
+            when {
+                clientFactory != null -> clientFactory!!(context)
+                context != null -> HealthConnectClient.getOrCreate(context)
+                else -> error("Context or clientFactory must be provided")
             }
+        } catch (e: Exception) {
+            val summary = ExportExecutionSummary(
+                outcome = ExportOutcome.USER_ACTION_REQUIRED,
+                message = "Health Connect is unavailable on this device: ${e.message ?: "provider missing"}",
+                executionTimestamp = now,
+            )
+            stateStore.saveExecutionSummary(summary)
+            null
+        }
+
+        private fun resolveDestination(
+            context: Context?,
+            now: Instant,
+            stateStore: ExportStateStore,
+        ): ExportDestination? = try {
+            when {
+                destinationFactory != null -> destinationFactory!!(context)
+                context != null -> defaultDestination(context, driveTokenProvider)
+                else -> error("Context or destinationFactory must be provided")
+            }
+        } catch (e: Exception) {
+            val summary = ExportExecutionSummary(
+                outcome = ExportOutcome.USER_ACTION_REQUIRED,
+                message = "Failed to configure export destination: ${e.message}",
+                executionTimestamp = now,
+            )
+            stateStore.saveExecutionSummary(summary)
+            null
+        }
+
+        private fun mapCycleResultToSummary(
+            cycleResult: ExportCycleResult,
+            now: Instant,
+        ): ExportExecutionSummary = when (cycleResult) {
+            is ExportCycleResult.Success -> ExportExecutionSummary(
+                outcome = ExportOutcome.SUCCESS,
+                batchId = cycleResult.batch.header.batchId,
+                recordCount = cycleResult.batch.header.recordCount,
+                executionTimestamp = now,
+                message = "Successfully exported batch ${cycleResult.batch.header.batchId} (${cycleResult.batch.header.recordCount} records)",
+                destinationLocation = cycleResult.destinationLocation,
+            )
+            is ExportCycleResult.NothingToExport -> ExportExecutionSummary(
+                outcome = ExportOutcome.NOTHING_TO_EXPORT,
+                executionTimestamp = now,
+                message = cycleResult.message,
+            )
+            is ExportCycleResult.RetryableFailure -> ExportExecutionSummary(
+                outcome = ExportOutcome.RETRYABLE_FAILURE,
+                batchId = cycleResult.batch?.header?.batchId,
+                recordCount = cycleResult.batch?.header?.recordCount ?: 0,
+                executionTimestamp = now,
+                message = cycleResult.message,
+            )
+            is ExportCycleResult.TerminalFailure -> ExportExecutionSummary(
+                outcome = if (cycleResult.userActionRequired) {
+                    ExportOutcome.USER_ACTION_REQUIRED
+                } else {
+                    ExportOutcome.TERMINAL_FAILURE
+                },
+                batchId = cycleResult.batch?.header?.batchId,
+                recordCount = cycleResult.batch?.header?.recordCount ?: 0,
+                executionTimestamp = now,
+                message = cycleResult.message,
+            )
+        }
+
+        private fun mapSummaryToWorkerResult(summary: ExportExecutionSummary): Result = when (summary.outcome) {
+            ExportOutcome.SUCCESS,
+            ExportOutcome.NOTHING_TO_EXPORT,
+            -> Result.success(createOutputData(summary))
+
+            ExportOutcome.RETRYABLE_FAILURE -> Result.retry()
+
+            ExportOutcome.USER_ACTION_REQUIRED,
+            ExportOutcome.TERMINAL_FAILURE,
+            -> Result.failure(createOutputData(summary))
         }
 
         private fun defaultDestination(
