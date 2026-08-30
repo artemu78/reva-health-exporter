@@ -1,6 +1,19 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
 }
+
+val versionProperties = Properties().apply {
+    rootProject.file("version.properties").inputStream().use(::load)
+}
+val releaseSigningValues = mapOf(
+    "storeFile" to providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull,
+    "storePassword" to providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull,
+    "keyAlias" to providers.environmentVariable("ANDROID_KEY_ALIAS").orNull,
+    "keyPassword" to providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull,
+)
+val releaseSigningReady = releaseSigningValues.values.all { !it.isNullOrBlank() }
 
 android {
     namespace = "dev.reva.healthexporter"
@@ -10,10 +23,33 @@ android {
         applicationId = "dev.reva.healthexporter"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = versionProperties.getProperty("VERSION_CODE").toInt()
+        versionName = versionProperties.getProperty("VERSION_NAME")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (releaseSigningReady) {
+                storeFile = file(checkNotNull(releaseSigningValues["storeFile"]))
+                storePassword = releaseSigningValues["storePassword"]
+                keyAlias = releaseSigningValues["keyAlias"]
+                keyPassword = releaseSigningValues["keyPassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 }
 
