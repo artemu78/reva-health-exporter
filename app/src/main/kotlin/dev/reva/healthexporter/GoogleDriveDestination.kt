@@ -7,6 +7,7 @@ import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
+import java.net.URI
 import java.net.URL
 import java.net.URLEncoder
 import java.time.Instant
@@ -225,7 +226,7 @@ class DefaultHttpTransport(
     private val readTimeoutMs: Int = 30_000,
 ) : HttpTransport {
     override suspend fun execute(request: HttpRequest): HttpResponse = withContext(Dispatchers.IO) {
-        val url = URL(request.url)
+        val url = URI(request.url).toURL()
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = request.method
             connectTimeout = connectTimeoutMs
