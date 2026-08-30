@@ -120,6 +120,22 @@ class ApplicationContractTest {
     }
 
     @Test
+    fun `API 30 gate launches the minified release build`() {
+        val workflow = projectDirectory.resolve("../.github/workflows/android.yml").normalize().readText()
+        val launchVerifier = projectDirectory.resolve("../scripts/verify-minified-launch.sh").normalize()
+
+        assertTrue("minified launch verifier must exist", Files.isRegularFile(launchVerifier))
+        assertTrue("minified launch verifier must be executable", Files.isExecutable(launchVerifier))
+        assertTrue(workflow.contains("./scripts/verify-minified-launch.sh"))
+
+        val script = launchVerifier.readText()
+        assertTrue(script.contains("assembleRelease"))
+        assertTrue(script.contains("install -r \"\$apk_path\""))
+        assertTrue(script.contains("dev.reva.healthexporter/.MainActivity"))
+        assertTrue(script.contains("pidof dev.reva.healthexporter"))
+    }
+
+    @Test
     fun `manifest exposes Health Connect and declares only selected read permissions`() {
         val manifest = projectDirectory.resolve("src/main/AndroidManifest.xml")
         val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(manifest.toFile())
