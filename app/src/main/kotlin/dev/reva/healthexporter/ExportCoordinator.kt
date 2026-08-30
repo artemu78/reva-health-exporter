@@ -17,9 +17,7 @@ fun interface IdGenerator {
     fun generateId(): String
 }
 
-object UuidGenerator : IdGenerator {
-    override fun generateId(): String = UUID.randomUUID().toString()
-}
+val UuidGenerator = IdGenerator { UUID.randomUUID().toString() }
 
 sealed interface ExportCycleResult {
     data class Success(
