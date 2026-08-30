@@ -77,4 +77,51 @@ class ApplicationContractTest {
             packages.item(0).attributes.getNamedItem("android:name").nodeValue,
         )
     }
+
+    @Test
+    fun `Android 13 and earlier providers can discover the rationale and legacy permissions`() {
+        val manifest = projectDirectory.resolve("src/main/AndroidManifest.xml")
+        val permissionsResource = projectDirectory.resolve("src/main/res/values/health_permissions.xml")
+        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(manifest.toFile())
+        val activities = document.getElementsByTagName("activity")
+        val rationaleActivity = (0 until activities.length)
+            .map { activities.item(it) }
+            .single { it.attributes.getNamedItem("android:name").nodeValue == ".PermissionsRationaleActivity" }
+        val rationaleActions = rationaleActivity.childNodes.asSequence()
+            .flatMap { it.childNodes.asSequence() }
+            .filter { it.nodeName == "action" }
+            .map { it.attributes.getNamedItem("android:name").nodeValue }
+            .toSet()
+        val metadata = rationaleActivity.childNodes.asSequence()
+            .first { it.nodeName == "meta-data" }
+
+        assertTrue("legacy Health Connect permissions resource must exist", Files.isRegularFile(permissionsResource))
+        assertTrue("androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" in rationaleActions)
+        assertEquals("health_permissions", metadata.attributes.getNamedItem("android:name").nodeValue)
+        assertEquals("@array/health_permissions", metadata.attributes.getNamedItem("android:resource").nodeValue)
+
+        val permissionsDocument = DocumentBuilderFactory.newInstance()
+            .newDocumentBuilder()
+            .parse(permissionsResource.toFile())
+        val items = permissionsDocument.getElementsByTagName("item")
+        val legacyPermissions = (0 until items.length).map { items.item(it).textContent }.toSet()
+        assertEquals(
+            setOf(
+                "androidx.health.permission.Steps.READ",
+                "androidx.health.permission.HeartRate.READ",
+                "androidx.health.permission.RestingHeartRate.READ",
+                "androidx.health.permission.SleepSession.READ",
+                "androidx.health.permission.SleepStage.READ",
+                "androidx.health.permission.Distance.READ",
+                "androidx.health.permission.TotalCaloriesBurned.READ",
+                "androidx.health.permission.ExerciseSession.READ",
+                "androidx.health.permission.OxygenSaturation.READ",
+            ),
+            legacyPermissions,
+        )
+    }
+
+    private fun org.w3c.dom.NodeList.asSequence(): Sequence<org.w3c.dom.Node> = sequence {
+        for (index in 0 until length) yield(item(index))
+    }
 }
