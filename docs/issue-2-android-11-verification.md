@@ -38,7 +38,7 @@ This protocol verifies the Health Connect provider and permission flow on the ta
 |---|---|---|
 | Provider available | PASS | On the target Android 11 phone, the installed app displayed the permission action. |
 | Grant all selected read permissions | PASS | Build `849be1e` reproduced a registration defect: no Health Connect screen appeared and the app was absent from Health Connect app permissions. After fix `e3cb833`, the target phone displayed the permission-selection screen, listed Reva Health Exporter under app permissions, accepted the grant, and the app showed all selected permissions as granted. |
-| Deny permission request | UNVERIFIED | Requires the target Android 11 phone. |
-| Revoke one granted permission | UNVERIFIED | Requires the target Android 11 phone. |
+| Deny permission request | PASS | On the target Android 11 phone, deliberately declining the request left the app usable, explained the limitation, and offered **Try again**. |
+| Revoke one granted permission | PASS | On the target Android 11 phone, revoking a selected permission was detected when returning to the app; the permission was shown as missing and **Grant again** was available. |
 
 Replace each `UNVERIFIED` entry only after performing the scenario on the target phone. Evidence should contain the app version, Android version, Health Connect version, scenario outcome, and a sanitized screenshot or written observation without health values.
