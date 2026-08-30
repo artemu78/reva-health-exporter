@@ -276,16 +276,16 @@ Initial candidates include steps, heart rate, resting heart rate, sleep, distanc
 
 **Acceptance criteria:**
 
-- [ ] Unique periodic work prevents duplicate schedules.
-- [ ] Appropriate network and battery constraints are applied.
-- [ ] Transient failures retry with backoff.
-- [ ] Permanent and user-action-required failures do not create infinite retry loops.
-- [ ] The UI shows the last result and current export state without promising an exact next execution time.
-- [ ] An `Export now` action uses one-time work through the same pipeline.
-- [ ] Offline execution succeeds after connectivity returns.
-- [ ] Successful export advances the checkpoint exactly once.
-- [ ] Work remains scheduled after app and device restart.
-- [ ] Automated worker tests do not wait for a real periodic interval.
+- [x] Unique periodic work prevents duplicate schedules.
+- [x] Appropriate network and battery constraints are applied.
+- [x] Transient failures retry with backoff.
+- [x] Permanent and user-action-required failures do not create infinite retry loops.
+- [x] The UI shows the last result and current export state without promising an exact next execution time.
+- [x] An `Export now` action uses one-time work through the same pipeline.
+- [x] Offline execution succeeds after connectivity returns.
+- [x] Successful export advances the checkpoint exactly once.
+- [x] Work remains scheduled after app and device restart.
+- [x] Automated worker tests do not wait for a real periodic interval.
 
 ### 13. Complete Android 11 end-to-end acceptance and signed APK
 

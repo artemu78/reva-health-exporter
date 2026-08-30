@@ -35,6 +35,8 @@
     <string name="drive_export_status_success">Exported batch %1$s (%2$d records) to Google Drive.</string>
     <string name="drive_export_status_nothing">No new health records to export.</string>
     <string name="drive_export_status_failure">Export failed: %1$s</string>
+    <string name="drive_export_status_periodic_scheduled">Periodic export is scheduled.</string>
+    <string name="drive_export_now_description">Trigger immediate export to Google Drive</string>
     <string name="drive_export_health_connect_not_ready">Health Connect is not ready.</string>
     <string name="drive_export_not_connected">Google Drive must be connected before exporting.</string>
     <string name="background_read_title">Background access</string>

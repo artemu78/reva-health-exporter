@@ -51,6 +51,69 @@ fun deserializeExportCheckpoint(serialized: String): ExportCheckpoint? {
     }
 }
 
+enum class ExportOutcome {
+    SUCCESS,
+    NOTHING_TO_EXPORT,
+    RETRYABLE_FAILURE,
+    USER_ACTION_REQUIRED,
+    TERMINAL_FAILURE,
+}
+
+data class ExportExecutionSummary(
+    val outcome: ExportOutcome,
+    val batchId: String? = null,
+    val recordCount: Int = 0,
+    val executionTimestamp: Instant = Instant.now(),
+    val message: String = "",
+    val destinationLocation: String? = null,
+) {
+    init {
+        require(recordCount >= 0) { "recordCount must be non-negative, got $recordCount" }
+    }
+}
+
+fun serializeExportExecutionSummary(summary: ExportExecutionSummary): String {
+    val json = JsonObject().apply {
+        addProperty("outcome", summary.outcome.name)
+        if (summary.batchId != null) addProperty("batchId", summary.batchId)
+        addProperty("recordCount", summary.recordCount)
+        addProperty("executionTimestamp", summary.executionTimestamp.toString())
+        addProperty("message", summary.message)
+        if (summary.destinationLocation != null) addProperty("destinationLocation", summary.destinationLocation)
+    }
+    return Gson().toJson(json)
+}
+
+fun deserializeExportExecutionSummary(serialized: String): ExportExecutionSummary? {
+    if (serialized.isBlank()) return null
+    return try {
+        val json = JsonParser.parseString(serialized).asJsonObject
+        val outcomeStr = json.get("outcome")?.asString ?: return null
+        val outcome = try {
+            ExportOutcome.valueOf(outcomeStr)
+        } catch (_: Exception) {
+            return null
+        }
+        val batchId = json.get("batchId")?.asString?.takeIf(String::isNotBlank)
+        val recordCount = json.get("recordCount")?.asInt ?: 0
+        val timestampStr = json.get("executionTimestamp")?.asString ?: return null
+        val executionTimestamp = Instant.parse(timestampStr)
+        val message = json.get("message")?.asString ?: ""
+        val destinationLocation = json.get("destinationLocation")?.asString?.takeIf(String::isNotBlank)
+
+        ExportExecutionSummary(
+            outcome = outcome,
+            batchId = batchId,
+            recordCount = recordCount,
+            executionTimestamp = executionTimestamp,
+            message = message,
+            destinationLocation = destinationLocation,
+        )
+    } catch (_: Exception) {
+        null
+    }
+}
+
 interface ExportStateStore {
     fun getInstallationId(): String
     fun getLastCheckpoint(): ExportCheckpoint?
@@ -58,6 +121,8 @@ interface ExportStateStore {
     fun getPendingBatch(): ExportBatch?
     fun savePendingBatch(batch: ExportBatch)
     fun clearPendingBatch()
+    fun getLastExecutionSummary(): ExportExecutionSummary?
+    fun saveExecutionSummary(summary: ExportExecutionSummary)
     fun clear()
 }
 
@@ -67,11 +132,13 @@ class InMemoryExportStateStore(
     private val persistentInstallationId: String = installationId ?: UUID.randomUUID().toString()
     private var checkpoint: ExportCheckpoint? = null
     private var pendingBatch: ExportBatch? = null
+    private var executionSummary: ExportExecutionSummary? = null
 
     var failOnSavePendingBatch: Throwable? = null
     var failOnSaveCheckpoint: Throwable? = null
     var failOnClearPendingBatch: Throwable? = null
     var failOnGetPendingBatch: Throwable? = null
+    var failOnSaveExecutionSummary: Throwable? = null
 
     override fun getInstallationId(): String = persistentInstallationId
 
@@ -97,9 +164,17 @@ class InMemoryExportStateStore(
         this.pendingBatch = null
     }
 
+    override fun getLastExecutionSummary(): ExportExecutionSummary? = executionSummary
+
+    override fun saveExecutionSummary(summary: ExportExecutionSummary) {
+        failOnSaveExecutionSummary?.let { throw it }
+        this.executionSummary = summary
+    }
+
     override fun clear() {
         checkpoint = null
         pendingBatch = null
+        executionSummary = null
     }
 }
 
@@ -170,10 +245,30 @@ class SharedPreferencesExportStateStore(
             .commit()
     }
 
+    override fun getLastExecutionSummary(): ExportExecutionSummary? {
+        val serialized = preferences.getString(KEY_LAST_EXECUTION_SUMMARY_JSON, null) ?: return null
+        val parsed = deserializeExportExecutionSummary(serialized)
+        if (parsed == null) {
+            preferences.edit()
+                .remove(KEY_LAST_EXECUTION_SUMMARY_JSON)
+                .putString(KEY_CORRUPT_SUMMARY_BACKUP, serialized)
+                .commit()
+        }
+        return parsed
+    }
+
+    override fun saveExecutionSummary(summary: ExportExecutionSummary) {
+        val serialized = serializeExportExecutionSummary(summary)
+        preferences.edit()
+            .putString(KEY_LAST_EXECUTION_SUMMARY_JSON, serialized)
+            .commit()
+    }
+
     override fun clear() {
         preferences.edit()
             .remove(KEY_LAST_CHECKPOINT_JSON)
             .remove(KEY_PENDING_BATCH_NDJSON)
+            .remove(KEY_LAST_EXECUTION_SUMMARY_JSON)
             .commit()
     }
 
@@ -182,7 +277,10 @@ class SharedPreferencesExportStateStore(
         const val KEY_INSTALLATION_ID = "installation_id"
         const val KEY_LAST_CHECKPOINT_JSON = "last_export_checkpoint_json"
         const val KEY_PENDING_BATCH_NDJSON = "pending_export_batch_ndjson"
+        const val KEY_LAST_EXECUTION_SUMMARY_JSON = "last_export_execution_summary_json"
         const val KEY_CORRUPT_CHECKPOINT_BACKUP = "corrupt_last_checkpoint_backup"
         const val KEY_CORRUPT_PENDING_BATCH_BACKUP = "corrupt_pending_batch_backup"
+        const val KEY_CORRUPT_SUMMARY_BACKUP = "corrupt_last_execution_summary_backup"
     }
 }
+
