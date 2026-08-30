@@ -107,14 +107,14 @@ class LocalFileDestination(
                 location = targetFile.absolutePath,
             )
         } catch (e: IOException) {
-            tempFile.delete()
+            Files.deleteIfExists(tempFile.toPath())
             UploadResult.Failure(
                 message = "Failed writing batch to local file: ${e.message ?: "I/O error"}",
                 isRetryable = true,
                 cause = e,
             )
         } catch (e: Exception) {
-            tempFile.delete()
+            Files.deleteIfExists(tempFile.toPath())
             UploadResult.Failure(
                 message = "Unexpected error writing batch to local file: ${e.message ?: "error"}",
                 isRetryable = true,

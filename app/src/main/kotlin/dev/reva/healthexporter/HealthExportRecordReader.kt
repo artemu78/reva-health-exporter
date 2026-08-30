@@ -20,7 +20,7 @@ val DEFAULT_EXPORT_TYPES: List<KClass<out Record>> = listOf(
     SleepSessionRecord::class,
 )
 
-interface HealthExportRecordReader {
+fun interface HealthExportRecordReader {
     suspend fun readRecords(timeWindow: TimeWindow): List<CanonicalRecord>
 }
 
@@ -40,46 +40,59 @@ class HealthConnectExportReader(
         val seenRecordKeys = mutableSetOf<Pair<String, String>>()
 
         for (recordType in supportedRecordTypes) {
-            var pageToken: String? = null
-            val seenPageTokens = mutableSetOf<String>()
-
-            do {
-                val response = try {
-                    client.readRecords(
-                        ReadRecordsRequest(
-                            recordType = recordType,
-                            timeRangeFilter = TimeRangeFilter.between(
-                                timeWindow.startInclusive,
-                                timeWindow.endExclusive,
-                            ),
-                            pageSize = pageSize,
-                            pageToken = pageToken,
-                        ),
-                    )
-                } catch (cancellation: CancellationException) {
-                    throw cancellation
-                }
-
-                for (record in response.records) {
-                    val canonical = mapper.mapRecord(record)
-                    // Ensure exact time-window boundary: startInclusive <= startTime < endExclusive
-                    if (!canonical.startTime.isBefore(timeWindow.startInclusive) &&
-                        canonical.startTime.isBefore(timeWindow.endExclusive)
-                    ) {
-                        val key = canonical.recordType to (canonical.metadata.clientRecordId ?: canonical.metadata.recordId)
-                        if (seenRecordKeys.add(key)) {
-                            collectedRecords.add(canonical)
-                        }
-                    }
-                }
-
-                pageToken = response.pageToken?.takeIf(String::isNotEmpty)
-                if (pageToken != null && !seenPageTokens.add(pageToken)) {
-                    break
-                }
-            } while (pageToken != null)
+            readRecordsForType(recordType, timeWindow, seenRecordKeys, collectedRecords)
         }
 
         return collectedRecords
+    }
+
+    private suspend fun readRecordsForType(
+        recordType: KClass<out Record>,
+        timeWindow: TimeWindow,
+        seenRecordKeys: MutableSet<Pair<String, String>>,
+        destination: MutableList<CanonicalRecord>,
+    ) {
+        var pageToken: String? = null
+        val seenPageTokens = mutableSetOf<String>()
+
+        do {
+            val response = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = recordType,
+                    timeRangeFilter = TimeRangeFilter.between(
+                        timeWindow.startInclusive,
+                        timeWindow.endExclusive,
+                    ),
+                    pageSize = pageSize,
+                    pageToken = pageToken,
+                ),
+            )
+
+            extractRecordsFromPage(response.records, timeWindow, seenRecordKeys, destination)
+
+            pageToken = response.pageToken?.takeIf(String::isNotEmpty)
+            if (pageToken != null && !seenPageTokens.add(pageToken)) {
+                break
+            }
+        } while (pageToken != null)
+    }
+
+    private fun extractRecordsFromPage(
+        records: List<Record>,
+        timeWindow: TimeWindow,
+        seenRecordKeys: MutableSet<Pair<String, String>>,
+        destination: MutableList<CanonicalRecord>,
+    ) {
+        for (record in records) {
+            val canonical = mapper.mapRecord(record)
+            if (!canonical.startTime.isBefore(timeWindow.startInclusive) &&
+                canonical.startTime.isBefore(timeWindow.endExclusive)
+            ) {
+                val key = canonical.recordType to (canonical.metadata.clientRecordId ?: canonical.metadata.recordId)
+                if (seenRecordKeys.add(key)) {
+                    destination.add(canonical)
+                }
+            }
+        }
     }
 }

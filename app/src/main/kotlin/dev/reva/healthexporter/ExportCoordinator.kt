@@ -13,7 +13,7 @@ data class ExportCoordinatorConfig(
     val maxBatchDuration: Duration? = Duration.ofDays(1),
 )
 
-interface IdGenerator {
+fun interface IdGenerator {
     fun generateId(): String
 }
 
@@ -60,7 +60,36 @@ class ExportCoordinator(
     private val mutex = Mutex()
 
     suspend fun export(): ExportCycleResult = mutex.withLock {
-        // 1. Verify destination readiness
+        val destCheckFailure = verifyDestination()
+        if (destCheckFailure != null) {
+            return@withLock destCheckFailure
+        }
+
+        val (pendingBatch, pendingBatchFailure) = loadPendingBatch()
+        if (pendingBatchFailure != null) {
+            return@withLock pendingBatchFailure
+        }
+        if (pendingBatch != null) {
+            return@withLock uploadAndConfirm(batch = pendingBatch, isRetry = true)
+        }
+
+        val now = clock.now(zoneId).toInstant()
+        val (timeWindow, windowFailure) = resolveTimeWindow(now)
+        if (windowFailure != null) {
+            return@withLock windowFailure
+        }
+        val safeWindow = checkNotNull(timeWindow)
+
+        val (rawRecords, readFailure) = readConfirmedRecords(safeWindow)
+        if (readFailure != null) {
+            return@withLock readFailure
+        }
+
+        val batch = buildExportBatch(now, safeWindow, checkNotNull(rawRecords))
+        return@withLock persistAndUpload(batch)
+    }
+
+    private suspend fun verifyDestination(): ExportCycleResult? {
         val destStatus = try {
             destination.verifyConfiguration()
         } catch (cancellation: CancellationException) {
@@ -69,96 +98,111 @@ class ExportCoordinator(
             DestinationStatus.Unavailable("Destination check failed: ${e.message}", e)
         }
 
-        when (destStatus) {
-            is DestinationStatus.Ready -> { /* Proceed */ }
-            is DestinationStatus.InvalidConfiguration -> {
-                return@withLock ExportCycleResult.TerminalFailure(
-                    batch = null,
-                    message = destStatus.message,
-                    cause = destStatus.cause,
-                    userActionRequired = true,
-                )
-            }
-            is DestinationStatus.Unavailable -> {
-                return@withLock ExportCycleResult.RetryableFailure(
-                    batch = null,
-                    message = destStatus.message,
-                    cause = destStatus.cause,
-                )
-            }
+        return when (destStatus) {
+            is DestinationStatus.Ready -> null
+            is DestinationStatus.InvalidConfiguration -> ExportCycleResult.TerminalFailure(
+                batch = null,
+                message = destStatus.message,
+                cause = destStatus.cause,
+                userActionRequired = true,
+            )
+            is DestinationStatus.Unavailable -> ExportCycleResult.RetryableFailure(
+                batch = null,
+                message = destStatus.message,
+                cause = destStatus.cause,
+            )
         }
+    }
 
-        // 2. Check for pending batch from earlier interrupted / failed run
-        val pendingBatch = try {
-            stateStore.getPendingBatch()
+    private fun loadPendingBatch(): Pair<ExportBatch?, ExportCycleResult?> {
+        return try {
+            val pending = stateStore.getPendingBatch()
+            Pair(pending, null)
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (e: Exception) {
-            return@withLock ExportCycleResult.TerminalFailure(
-                batch = null,
-                message = "Failed to load pending batch from state store: ${e.message}",
-                cause = e,
+            Pair(
+                null,
+                ExportCycleResult.TerminalFailure(
+                    batch = null,
+                    message = "Failed to load pending batch from state store: ${e.message}",
+                    cause = e,
+                ),
             )
         }
+    }
 
-        if (pendingBatch != null) {
-            return@withLock uploadAndConfirm(batch = pendingBatch, isRetry = true)
-        }
-
-        // 3. Determine next export time window
-        val now = clock.now(zoneId).toInstant()
+    private fun resolveTimeWindow(now: Instant): Pair<TimeWindow?, ExportCycleResult?> {
         val lastCheckpoint = try {
             stateStore.getLastCheckpoint()
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (e: Exception) {
-            return@withLock ExportCycleResult.TerminalFailure(
-                batch = null,
-                message = "Failed to load checkpoint from state store: ${e.message}",
-                cause = e,
+            return Pair(
+                null,
+                ExportCycleResult.TerminalFailure(
+                    batch = null,
+                    message = "Failed to load checkpoint from state store: ${e.message}",
+                    cause = e,
+                ),
             )
         }
 
         val startInclusive = lastCheckpoint?.lastWindowEnd ?: now.minus(config.initialLookbackPeriod)
-        var endExclusive = now
-
-        if (config.maxBatchDuration != null) {
-            val clamped = startInclusive.plus(config.maxBatchDuration)
-            if (clamped.isBefore(endExclusive)) {
-                endExclusive = clamped
-            }
+        val maxDuration = config.maxBatchDuration
+        val endExclusive = if (maxDuration != null) {
+            val clamped = startInclusive.plus(maxDuration)
+            if (clamped.isBefore(now)) clamped else now
+        } else {
+            now
         }
 
         if (!startInclusive.isBefore(endExclusive)) {
-            return@withLock ExportCycleResult.NothingToExport(
-                timeWindow = null,
-                message = "No new export window available (start $startInclusive is not before end $endExclusive)",
+            return Pair(
+                null,
+                ExportCycleResult.NothingToExport(
+                    timeWindow = null,
+                    message = "No new export window available (start $startInclusive is not before end $endExclusive)",
+                ),
             )
         }
 
-        val timeWindow = TimeWindow(startInclusive = startInclusive, endExclusive = endExclusive)
+        return Pair(TimeWindow(startInclusive = startInclusive, endExclusive = endExclusive), null)
+    }
 
-        // 4. Query records from Health Connect
-        val rawRecords = try {
-            recordReader.readRecords(timeWindow)
+    private suspend fun readConfirmedRecords(timeWindow: TimeWindow): Pair<List<CanonicalRecord>?, ExportCycleResult?> {
+        return try {
+            val records = recordReader.readRecords(timeWindow)
+            Pair(records, null)
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (security: SecurityException) {
-            return@withLock ExportCycleResult.TerminalFailure(
-                batch = null,
-                message = "Health Connect read permission denied: ${security.message ?: "permission revoked"}",
-                cause = security,
-                userActionRequired = true,
+            Pair(
+                null,
+                ExportCycleResult.TerminalFailure(
+                    batch = null,
+                    message = "Health Connect read permission denied: ${security.message ?: "permission revoked"}",
+                    cause = security,
+                    userActionRequired = true,
+                ),
             )
         } catch (e: Exception) {
-            return@withLock ExportCycleResult.RetryableFailure(
-                batch = null,
-                message = "Failed reading Health Connect records: ${e.message ?: "read error"}",
-                cause = e,
+            Pair(
+                null,
+                ExportCycleResult.RetryableFailure(
+                    batch = null,
+                    message = "Failed reading Health Connect records: ${e.message ?: "read error"}",
+                    cause = e,
+                ),
             )
         }
+    }
 
-        // 5. Deduplicate and construct immutable batch
+    private fun buildExportBatch(
+        now: Instant,
+        timeWindow: TimeWindow,
+        rawRecords: List<CanonicalRecord>,
+    ): ExportBatch {
         val deduplicated = rawRecords.distinctBy { it.recordType to (it.metadata.clientRecordId ?: it.metadata.recordId) }
         val installationId = stateStore.getInstallationId()
         val batchId = idGenerator.generateId()
@@ -174,26 +218,26 @@ class ExportCoordinator(
             recordTypes = recordTypes,
         )
 
-        val batch = ExportBatch(
+        return ExportBatch(
             header = header,
             records = deduplicated,
         )
+    }
 
-        // 6. Persist pending batch before attempting upload
+    private suspend fun persistAndUpload(batch: ExportBatch): ExportCycleResult {
         try {
             stateStore.savePendingBatch(batch)
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (e: Exception) {
-            return@withLock ExportCycleResult.RetryableFailure(
+            return ExportCycleResult.RetryableFailure(
                 batch = batch,
                 message = "Failed to persist pending batch before upload: ${e.message}",
                 cause = e,
             )
         }
 
-        // 7. Upload and advance checkpoint
-        return@withLock uploadAndConfirm(batch = batch, isRetry = false)
+        return uploadAndConfirm(batch = batch, isRetry = false)
     }
 
     private suspend fun uploadAndConfirm(batch: ExportBatch, isRetry: Boolean): ExportCycleResult {
