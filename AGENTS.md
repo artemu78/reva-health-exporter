@@ -17,6 +17,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the application structure, [ROADMAP.m
 - Include `Closes #<number>` in the pull-request description so merging closes the issue.
 - Do not commit implementation work directly to `main`.
 - Pull requests must be opened automatically by the agent once the implementation, tests, and verification evidence are ready and pushed.
+- Every pull request must increment both `VERSION_CODE` and `VERSION_NAME` in `version.properties` relative to its target branch. If concurrent pull requests choose the same next version, update the later pull request again after synchronizing with its target branch and before merge.
 - **Never merge pull requests.** Merging pull requests is strictly a manual step performed by the user after reviewing the pull request and its verification evidence.
 - If an issue reveals additional scope, create a follow-up issue instead of silently expanding the current pull request.
 
