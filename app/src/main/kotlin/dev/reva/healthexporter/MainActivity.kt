@@ -3,6 +3,7 @@ package dev.reva.healthexporter
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -12,6 +13,7 @@ import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +22,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var permissionLauncher: ActivityResultLauncher<Set<String>>
+    private lateinit var documentLauncher: ActivityResultLauncher<String>
     private var currentPermissions: PermissionSummary? = null
     private var lastGrantedMetrics: Set<HealthMetric>? = null
     private var persistentNotice = PermissionNotice.NONE
@@ -28,11 +31,12 @@ class MainActivity : ComponentActivity() {
     private var healthConnectClient: HealthConnectClient? = null
     private var grantedReadPermissions: Set<String> = emptySet()
     private var lastValidDiagnosticState: DiagnosticScreenState? = null
+    private var lastDiagnosticResult: DiagnosticProbeResult? = null
     private val diagnosticPresenter by lazy {
         DiagnosticResultsPresenter(
             DiagnosticProbeRunner { window, permissions ->
                 val client = checkNotNull(healthConnectClient) { "Health Connect is not ready" }
-                HealthRecordProbe(client).probe(window, permissions)
+                HealthRecordProbe(client).probe(window, permissions).also { lastDiagnosticResult = it }
             },
         )
     }
@@ -56,6 +60,14 @@ class MainActivity : ComponentActivity() {
             }
             showPermissions(grantedMetrics)
             refreshDiagnostics()
+        }
+        documentLauncher = registerForActivityResult(
+            ActivityResultContracts.CreateDocument("application/json"),
+        ) { destination -> exportSnapshot(destination) }
+        findViewById<Button>(R.id.diagnostic_export).setOnClickListener {
+            if (lastDiagnosticResult != null) {
+                documentLauncher.launch(SNAPSHOT_FILE_NAME)
+            }
         }
     }
 
@@ -100,6 +112,8 @@ class MainActivity : ComponentActivity() {
                 (state.phase != DiagnosticScreenPhase.ERROR || state.canRetry)
             setOnClickListener { onAction(DiagnosticUiAction.Refresh) }
         }
+        findViewById<Button>(R.id.diagnostic_export).isEnabled =
+            lastDiagnosticResult != null && state.phase != DiagnosticScreenPhase.LOADING
         findViewById<RadioGroup>(R.id.diagnostic_time_window).apply {
             setOnCheckedChangeListener(null)
             check(
@@ -235,6 +249,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun exportSnapshot(destination: Uri?) {
+        val result = lastDiagnosticResult
+        val exportResult = if (result == null) {
+            DocumentExportResult.DestinationUnavailable
+        } else {
+            val snapshot = diagnosticSnapshot(
+                result = result,
+                appVersion = BuildConfig.VERSION_NAME,
+                androidVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+                grantedMetrics = metricsFor(grantedReadPermissions),
+            )
+            val content = DiagnosticSnapshotSerializer().serialize(snapshot)
+            DiagnosticDocumentExporter(
+                DocumentOutput { uri -> contentResolver.openOutputStream(Uri.parse(uri), "wt") },
+            ).export(destination?.toString(), content)
+        }
+        findViewById<TextView>(R.id.diagnostic_export_status).text = when (exportResult) {
+            DocumentExportResult.Success -> getString(R.string.diagnostic_export_success)
+            DocumentExportResult.Cancelled -> getString(R.string.diagnostic_export_cancelled)
+            DocumentExportResult.DestinationUnavailable ->
+                getString(R.string.diagnostic_export_destination_unavailable)
+            DocumentExportResult.WriteFailed -> getString(R.string.diagnostic_export_write_failed)
+        }
+    }
+
     private fun createDiagnosticRow(
         row: DiagnosticMetricRow,
         onAction: (DiagnosticUiAction) -> Unit,
@@ -310,6 +349,7 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val DIAGNOSTIC_STATE_KEY = "diagnostic_screen_state"
+        const val SNAPSHOT_FILE_NAME = "reva-health-diagnostic.json"
     }
 }
 

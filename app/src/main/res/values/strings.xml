@@ -12,6 +12,12 @@
     <string name="window_seven_days_description">Show results from the last 7 days</string>
     <string name="diagnostic_refresh">Refresh</string>
     <string name="diagnostic_refresh_description">Refresh diagnostic results</string>
+    <string name="diagnostic_export">Save sanitized snapshot</string>
+    <string name="diagnostic_export_description">Save a sanitized diagnostic JSON snapshot</string>
+    <string name="diagnostic_export_success">Sanitized diagnostic snapshot saved.</string>
+    <string name="diagnostic_export_cancelled">Saving cancelled. No file was written.</string>
+    <string name="diagnostic_export_destination_unavailable">The selected destination is unavailable.</string>
+    <string name="diagnostic_export_write_failed">The snapshot could not be written.</string>
     <string name="diagnostic_loading_description">Loading diagnostic results</string>
     <string name="diagnostic_preparing">Preparing diagnostic results…</string>
 </resources>

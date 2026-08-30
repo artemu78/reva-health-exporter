@@ -95,6 +95,22 @@
             android:contentDescription="@string/diagnostic_refresh_description"
             android:text="@string/diagnostic_refresh" />
 
+        <Button
+            android:id="@+id/diagnostic_export"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:contentDescription="@string/diagnostic_export_description"
+            android:enabled="false"
+            android:text="@string/diagnostic_export" />
+
+        <TextView
+            android:id="@+id/diagnostic_export_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:accessibilityLiveRegion="polite" />
+
         <ProgressBar
             android:id="@+id/diagnostic_progress"
             style="?android:attr/progressBarStyle"
