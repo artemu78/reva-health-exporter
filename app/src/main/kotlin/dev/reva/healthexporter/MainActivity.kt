@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
     private var backgroundReadSupport: BackgroundReadSupport = BackgroundReadSupport.UNSUPPORTED
     private var backgroundSummary: BackgroundReadSummary? = null
     private val probeStore by lazy { SharedPreferencesBackgroundProbeStore(this) }
+    private val exportStateStore by lazy { SharedPreferencesExportStateStore(this) }
     private var lastValidDiagnosticState: DiagnosticScreenState? = null
     private var lastDiagnosticResult: DiagnosticProbeResult? = null
     private val diagnosticPresenter by lazy {
@@ -148,7 +149,7 @@ class MainActivity : ComponentActivity() {
         findViewById<Button>(R.id.drive_export_now).visibility = if (isDriveConnected) View.VISIBLE else View.GONE
 
         if (state is DriveAuthorizationState.Connected) {
-            ExportScheduler.schedulePeriodicExport(this)
+            ExportScheduler.schedulePeriodicExport(this, accountId = state.accountId)
         } else if (state == DriveAuthorizationState.Disconnected) {
             ExportScheduler.cancelPeriodicExport(this)
         }
@@ -172,13 +173,11 @@ class MainActivity : ComponentActivity() {
         findViewById<TextView>(R.id.drive_export_status).text = getString(R.string.drive_export_status_exporting)
         findViewById<Button>(R.id.drive_export_now).isEnabled = false
 
-        ExportWorker.destinationFactory = {
-            val gateway = googleDriveGatewayFactory(this, state.accountId)
-            GoogleDriveDestination(driveGateway = gateway)
-        }
-        ExportWorker.clientFactory = { client }
-
-        val workId = ExportScheduler.triggerImmediateExport(this, androidx.work.ExistingWorkPolicy.REPLACE)
+        val workId = ExportScheduler.triggerImmediateExport(
+            context = this,
+            policy = androidx.work.ExistingWorkPolicy.REPLACE,
+            accountId = state.accountId,
+        )
         androidx.work.WorkManager.getInstance(this)
             .getWorkInfoByIdLiveData(workId)
             .observe(this) { workInfo ->
@@ -195,8 +194,7 @@ class MainActivity : ComponentActivity() {
 
     private fun renderExportStatus() {
         val statusView = findViewById<TextView>(R.id.drive_export_status)
-        val stateStore = SharedPreferencesExportStateStore(this)
-        val lastSummary = stateStore.getLastExecutionSummary()
+        val lastSummary = exportStateStore.getLastExecutionSummary()
         if (lastSummary != null) {
             statusView.text = when (lastSummary.outcome) {
                 ExportOutcome.SUCCESS -> getString(

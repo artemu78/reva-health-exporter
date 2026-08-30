@@ -16,7 +16,10 @@ class ExportWorker(
     workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
 
-    override suspend fun doWork(): Result = execute(applicationContext)
+    override suspend fun doWork(): Result {
+        val accountId = inputData.getString(ExportScheduler.KEY_ACCOUNT_ID)
+        return execute(applicationContext, accountId)
+    }
 
     companion object {
         const val KEY_OUTCOME = "outcome"
@@ -48,15 +51,22 @@ class ExportWorker(
             idGenerator = UuidGenerator
         }
 
-        suspend fun execute(context: Context? = null): Result = sharedExecutionLock.withLock {
+        suspend fun execute(
+            context: Context? = null,
+            accountId: String? = null,
+        ): Result = sharedExecutionLock.withLock {
             val now = clock.now(zoneId).toInstant()
             val stateStore = resolveStateStore(context)
 
-            val client = resolveClient(context, now, stateStore)
-                ?: return@withLock Result.failure(createOutputData(stateStore.getLastExecutionSummary()!!))
+            val client = when (val res = resolveClient(context, now, stateStore)) {
+                is Resolution.Success -> res.value
+                is Resolution.Failure -> return@withLock Result.failure(createOutputData(res.summary))
+            }
 
-            val destination = resolveDestination(context, now, stateStore)
-                ?: return@withLock Result.failure(createOutputData(stateStore.getLastExecutionSummary()!!))
+            val destination = when (val res = resolveDestination(context, now, stateStore, accountId)) {
+                is Resolution.Success -> res.value
+                is Resolution.Failure -> return@withLock Result.failure(createOutputData(res.summary))
+            }
 
             val recordReader = recordReaderFactory?.invoke(client)
                 ?: HealthConnectExportReader(client = client)
@@ -75,6 +85,11 @@ class ExportWorker(
             return@withLock mapSummaryToWorkerResult(summary)
         }
 
+        private sealed interface Resolution<out T> {
+            data class Success<T>(val value: T) : Resolution<T>
+            data class Failure(val summary: ExportExecutionSummary) : Resolution<Nothing>
+        }
+
         private fun resolveStateStore(context: Context?): ExportStateStore = when {
             stateStoreFactory != null -> stateStoreFactory!!(context)
             context != null -> SharedPreferencesExportStateStore(context)
@@ -85,12 +100,13 @@ class ExportWorker(
             context: Context?,
             now: Instant,
             stateStore: ExportStateStore,
-        ): HealthConnectClient? = try {
-            when {
+        ): Resolution<HealthConnectClient> = try {
+            val client = when {
                 clientFactory != null -> clientFactory!!(context)
                 context != null -> HealthConnectClient.getOrCreate(context)
                 else -> error("Context or clientFactory must be provided")
             }
+            Resolution.Success(client)
         } catch (e: Exception) {
             val summary = ExportExecutionSummary(
                 outcome = ExportOutcome.USER_ACTION_REQUIRED,
@@ -98,19 +114,21 @@ class ExportWorker(
                 executionTimestamp = now,
             )
             stateStore.saveExecutionSummary(summary)
-            null
+            Resolution.Failure(summary)
         }
 
         private fun resolveDestination(
             context: Context?,
             now: Instant,
             stateStore: ExportStateStore,
-        ): ExportDestination? = try {
-            when {
+            accountId: String?,
+        ): Resolution<ExportDestination> = try {
+            val destination = when {
                 destinationFactory != null -> destinationFactory!!(context)
-                context != null -> defaultDestination(context, driveTokenProvider)
+                context != null -> defaultDestination(context, accountId, driveTokenProvider)
                 else -> error("Context or destinationFactory must be provided")
             }
+            Resolution.Success(destination)
         } catch (e: Exception) {
             val summary = ExportExecutionSummary(
                 outcome = ExportOutcome.USER_ACTION_REQUIRED,
@@ -118,7 +136,7 @@ class ExportWorker(
                 executionTimestamp = now,
             )
             stateStore.saveExecutionSummary(summary)
-            null
+            Resolution.Failure(summary)
         }
 
         private fun mapCycleResultToSummary(
@@ -172,9 +190,11 @@ class ExportWorker(
 
         private fun defaultDestination(
             context: Context,
+            accountId: String?,
             tokenProvider: (suspend (Context?) -> String?)?,
         ): ExportDestination {
             val gateway = HttpGoogleDriveGateway(
+                accountId = accountId,
                 tokenProvider = {
                     tokenProvider?.invoke(context)
                 },

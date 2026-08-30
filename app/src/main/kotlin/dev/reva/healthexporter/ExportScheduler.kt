@@ -21,6 +21,7 @@ object ExportScheduler {
     const val PERIODIC_WORK_NAME = "reva_periodic_health_export"
     const val ONE_TIME_WORK_NAME = "reva_immediate_health_export"
     const val TAG_EXPORT_WORK = "reva_export_work"
+    const val KEY_ACCOUNT_ID = "account_id"
 
     val DEFAULT_PERIODIC_INTERVAL: Duration = Duration.ofHours(1)
     val DEFAULT_BACKOFF_POLICY: BackoffPolicy = BackoffPolicy.EXPONENTIAL
@@ -34,13 +35,20 @@ object ExportScheduler {
     fun buildPeriodicWorkRequest(
         interval: Duration = DEFAULT_PERIODIC_INTERVAL,
         flexInterval: Duration? = null,
+        accountId: String? = null,
     ): PeriodicWorkRequest {
         val intervalMillis = interval.toMillis().coerceAtLeast(PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS)
         val builder = if (flexInterval != null) {
-            val flexMillis = flexInterval.toMillis().coerceAtLeast(PeriodicWorkRequest.MIN_PERIODIC_FLEX_MILLIS)
+            val flexMillis = flexInterval.toMillis()
+                .coerceAtLeast(PeriodicWorkRequest.MIN_PERIODIC_FLEX_MILLIS)
+                .coerceAtMost(intervalMillis)
             PeriodicWorkRequestBuilder<ExportWorker>(intervalMillis, TimeUnit.MILLISECONDS, flexMillis, TimeUnit.MILLISECONDS)
         } else {
             PeriodicWorkRequestBuilder<ExportWorker>(intervalMillis, TimeUnit.MILLISECONDS)
+        }
+
+        if (accountId != null) {
+            builder.setInputData(androidx.work.workDataOf(KEY_ACCOUNT_ID to accountId))
         }
 
         return builder
@@ -50,8 +58,12 @@ object ExportScheduler {
             .build()
     }
 
-    fun buildOneTimeWorkRequest(): OneTimeWorkRequest {
-        return OneTimeWorkRequestBuilder<ExportWorker>()
+    fun buildOneTimeWorkRequest(accountId: String? = null): OneTimeWorkRequest {
+        val builder = OneTimeWorkRequestBuilder<ExportWorker>()
+        if (accountId != null) {
+            builder.setInputData(androidx.work.workDataOf(KEY_ACCOUNT_ID to accountId))
+        }
+        return builder
             .setConstraints(createConstraints())
             .setBackoffCriteria(DEFAULT_BACKOFF_POLICY, DEFAULT_BACKOFF_DELAY_MILLIS, TimeUnit.MILLISECONDS)
             .addTag(TAG_EXPORT_WORK)
@@ -62,14 +74,16 @@ object ExportScheduler {
         context: Context,
         interval: Duration = DEFAULT_PERIODIC_INTERVAL,
         policy: ExistingPeriodicWorkPolicy = ExistingPeriodicWorkPolicy.KEEP,
-    ): Operation = schedulePeriodicExport(WorkManager.getInstance(context), interval, policy)
+        accountId: String? = null,
+    ): Operation = schedulePeriodicExport(WorkManager.getInstance(context), interval, policy, accountId)
 
     fun schedulePeriodicExport(
         workManager: WorkManager,
         interval: Duration = DEFAULT_PERIODIC_INTERVAL,
         policy: ExistingPeriodicWorkPolicy = ExistingPeriodicWorkPolicy.KEEP,
+        accountId: String? = null,
     ): Operation {
-        val request = buildPeriodicWorkRequest(interval)
+        val request = buildPeriodicWorkRequest(interval, accountId = accountId)
         return workManager.enqueueUniquePeriodicWork(
             PERIODIC_WORK_NAME,
             policy,
@@ -87,13 +101,15 @@ object ExportScheduler {
     fun triggerImmediateExport(
         context: Context,
         policy: ExistingWorkPolicy = ExistingWorkPolicy.REPLACE,
-    ): UUID = triggerImmediateExport(WorkManager.getInstance(context), policy)
+        accountId: String? = null,
+    ): UUID = triggerImmediateExport(WorkManager.getInstance(context), policy, accountId)
 
     fun triggerImmediateExport(
         workManager: WorkManager,
         policy: ExistingWorkPolicy = ExistingWorkPolicy.REPLACE,
+        accountId: String? = null,
     ): UUID {
-        val request = buildOneTimeWorkRequest()
+        val request = buildOneTimeWorkRequest(accountId)
         workManager.enqueueUniqueWork(
             ONE_TIME_WORK_NAME,
             policy,
