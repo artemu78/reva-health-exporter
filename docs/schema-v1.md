@@ -12,7 +12,7 @@ Reva Health Exporter exports health data batches in **Newline-Delimited JSON (ND
 
 | Feature | Single Large JSON Envelope | NDJSON (`.ndjson`) + Gzip |
 |---|---|---|
-| **Memory footprint on mobile** | Entire batch (potentially 100,000+ data points) must reside in RAM simultaneously as a JSON DOM tree. | Streamable line-by-line reading and writing with fixed $O(1)$ memory usage. |
+| **Memory footprint on mobile** | Entire batch (potentially 100,000+ data points) must reside in RAM simultaneously as a JSON DOM tree. | Enables streaming line-by-line reading and writing; current in-memory serializer sorts and buffers per-batch while enabling streaming ingestion in downstream pipelines. |
 | **Recovery from partial corruption** | Any truncation or corrupted byte invalidates the entire file. | Lines prior to a corrupted line remain independently readable and parsable. |
 | **Compression efficiency** | High compression ratio with Gzip. | Extremely high compression ratio with Gzip because repeated JSON field keys across adjacent lines compress down to negligible overhead. |
 | **Batch metadata availability** | Usually at top or bottom of JSON object. | Line 1 is the immutable batch manifest/header (`recordType: "header"`), allowing instant metadata inspection without buffering whole payloads. |
@@ -229,9 +229,10 @@ Every canonical record contains standard provenance and platform metadata:
 }
 ```
 
-### 5.7. Deferred / Optional Types
-- `resting_heart_rate`: `"beatsPerMinute": 58`
-- `oxygen_saturation`: `"percentage": 98.5` (range 0.0..100.0)
+### 5.7. Additional Supported Types (Optional per Batch)
+The following types are fully supported in Schema Version 1. They are included when written by a data origin (such as future companion app updates or other sensors), but are omitted when absent from a collection window:
+- `resting_heart_rate`: `"beatsPerMinute": 58` (valid range `1..300`)
+- `oxygen_saturation`: `"percentage": 98.5` (valid range `0.0..100.0`)
 
 ---
 

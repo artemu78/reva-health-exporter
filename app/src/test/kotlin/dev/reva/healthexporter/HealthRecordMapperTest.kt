@@ -120,6 +120,61 @@ class HealthRecordMapperTest {
     }
 
     @Test
+    fun mapsStepsRecordWithClientRecordVersionZeroPreserved() = runBlocking {
+        val client = FakeHealthConnectClient()
+        client.setPackageName("com.mi.health")
+        val start = Instant.parse("2026-08-30T10:00:00Z")
+        val end = Instant.parse("2026-08-30T10:15:00Z")
+        val response = client.insertRecords(
+            listOf(
+                StepsRecord(
+                    startTime = start,
+                    startZoneOffset = null,
+                    endTime = end,
+                    endZoneOffset = null,
+                    count = 200,
+                    metadata = Metadata.manualEntry(
+                        clientRecordId = "client-step-zero",
+                        clientRecordVersion = 0L,
+                    ),
+                ),
+            ),
+        )
+
+        val readRecord = client.readRecords(
+            ReadRecordsRequest(
+                recordType = StepsRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start.minusSeconds(1), end.plusSeconds(1)),
+            ),
+        ).records.first()
+
+        val canonical = mapper.mapRecord(readRecord) as CanonicalStepsRecord
+
+        assertEquals("client-step-zero", canonical.metadata.clientRecordId)
+        assertEquals(0L, canonical.metadata.clientRecordVersion)
+
+        // Verify serializer preserves "clientRecordVersion": 0
+        val serializer = ExportBatchSerializer()
+        val batch = ExportBatch(
+            header = BatchHeader(
+                schemaVersion = 1,
+                installationId = "inst-1",
+                batchId = "batch-1",
+                createdAt = Instant.parse("2026-08-30T11:00:00Z"),
+                timeWindow = TimeWindow(start, end),
+                recordCount = 1,
+                recordTypes = listOf("steps"),
+            ),
+            records = listOf(canonical),
+        )
+        val json = serializer.serializeToNdjson(batch)
+        assertEquals(true, json.contains("\"clientRecordVersion\":0"))
+
+        val parsed = serializer.parseNdjson(json)
+        assertEquals(0L, parsed.records.first().metadata.clientRecordVersion)
+    }
+
+    @Test
     fun mapsHeartRateRecordWithSeriesSamples() = runBlocking {
         val client = FakeHealthConnectClient()
         client.setPackageName("com.mi.health")

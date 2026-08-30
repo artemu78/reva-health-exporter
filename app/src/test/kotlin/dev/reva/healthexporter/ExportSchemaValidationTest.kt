@@ -85,6 +85,9 @@ class ExportSchemaValidationTest {
         assertThrows(InvalidExportSchemaException::class.java) {
             HeartRateSample(time = start, beatsPerMinute = -5)
         }
+        assertThrows(InvalidExportSchemaException::class.java) {
+            HeartRateSample(time = start, beatsPerMinute = 301)
+        }
 
         assertThrows(InvalidExportSchemaException::class.java) {
             CanonicalHeartRateRecord(
@@ -275,7 +278,7 @@ class ExportSchemaValidationTest {
     }
 
     @Test
-    fun restingHeartRateRejectsNonPositiveBpm() {
+    fun restingHeartRateRejectsOutOfRangeBpm() {
         val time = Instant.parse("2026-08-30T10:00:00Z")
 
         assertThrows(InvalidExportSchemaException::class.java) {
@@ -286,6 +289,17 @@ class ExportSchemaValidationTest {
                 endZoneOffset = null,
                 metadata = validMetadata,
                 beatsPerMinute = 0,
+            )
+        }
+
+        assertThrows(InvalidExportSchemaException::class.java) {
+            CanonicalRestingHeartRateRecord(
+                startTime = time,
+                startZoneOffset = null,
+                endTime = time,
+                endZoneOffset = null,
+                metadata = validMetadata,
+                beatsPerMinute = 301,
             )
         }
     }

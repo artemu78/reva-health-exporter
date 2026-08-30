@@ -271,6 +271,71 @@ class ExportBatchSerializerTest {
     }
 
     @Test
+    fun rejectsFractionalNumbersInIntegralFields() {
+        val validHeader = """{"recordType":"header","schemaVersion":1,"installationId":"i","batchId":"b","createdAt":"2026-08-30T00:00:00Z","timeWindow":{"startInclusive":"2026-08-29T00:00:00Z","endExclusive":"2026-08-30T00:00:00Z"},"recordCount":1,"recordTypes":["steps"]}"""
+
+        // Fractional count
+        val fracCount = """{"recordType":"steps","recordId":"s1","origin":"com.mi.health","startTime":"2026-08-30T10:00:00Z","endTime":"2026-08-30T10:15:00Z","count":100.5}"""
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseNdjson("$validHeader\n$fracCount")
+        }
+
+        // Fractional schemaVersion in header
+        val fracVersionHeader = """{"recordType":"header","schemaVersion":1.5,"installationId":"i","batchId":"b","createdAt":"2026-08-30T00:00:00Z","timeWindow":{"startInclusive":"2026-08-29T00:00:00Z","endExclusive":"2026-08-30T00:00:00Z"},"recordCount":0,"recordTypes":[]}"""
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseNdjson(fracVersionHeader)
+        }
+
+        // Fractional exerciseType
+        val validExHeader = """{"recordType":"header","schemaVersion":1,"installationId":"i","batchId":"b","createdAt":"2026-08-30T00:00:00Z","timeWindow":{"startInclusive":"2026-08-29T00:00:00Z","endExclusive":"2026-08-30T00:00:00Z"},"recordCount":1,"recordTypes":["exercise_session"]}"""
+        val fracExerciseType = """{"recordType":"exercise_session","recordId":"e1","origin":"com.mi.health","startTime":"2026-08-30T10:00:00Z","endTime":"2026-08-30T10:15:00Z","exerciseType":79.9}"""
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseNdjson("$validExHeader\n$fracExerciseType")
+        }
+    }
+
+    @Test
+    fun rejectsIncompatibleTypesInOptionalFields() {
+        val validHeader = """{"recordType":"header","schemaVersion":1,"installationId":"i","batchId":"b","createdAt":"2026-08-30T00:00:00Z","timeWindow":{"startInclusive":"2026-08-29T00:00:00Z","endExclusive":"2026-08-30T00:00:00Z"},"recordCount":1,"recordTypes":["steps"]}"""
+
+        // Numeric startZoneOffset
+        val numericOffset = """{"recordType":"steps","recordId":"s1","origin":"com.mi.health","startTime":"2026-08-30T10:00:00Z","startZoneOffset":7,"endTime":"2026-08-30T10:15:00Z","count":100}"""
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseNdjson("$validHeader\n$numericOffset")
+        }
+
+        // String clientRecordVersion
+        val stringVersion = """{"recordType":"steps","recordId":"s1","origin":"com.mi.health","startTime":"2026-08-30T10:00:00Z","clientRecordVersion":"v1","endTime":"2026-08-30T10:15:00Z","count":100}"""
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseNdjson("$validHeader\n$stringVersion")
+        }
+
+        // String device (should be object)
+        val stringDevice = """{"recordType":"steps","recordId":"s1","origin":"com.mi.health","startTime":"2026-08-30T10:00:00Z","device":"watch","endTime":"2026-08-30T10:15:00Z","count":100}"""
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseNdjson("$validHeader\n$stringDevice")
+        }
+    }
+
+    @Test
+    fun parsesExplicitJsonNullOptionalFieldsAsNull() {
+        val validHeader = """{"recordType":"header","schemaVersion":1,"installationId":"i","batchId":"b","createdAt":"2026-08-30T00:00:00Z","timeWindow":{"startInclusive":"2026-08-29T00:00:00Z","endExclusive":"2026-08-30T00:00:00Z"},"recordCount":1,"recordTypes":["steps"]}"""
+        val recordWithNulls = """{"recordType":"steps","recordId":"s1","origin":"com.mi.health","startTime":"2026-08-30T10:00:00Z","startZoneOffset":null,"endTime":"2026-08-30T10:15:00Z","endZoneOffset":null,"clientRecordId":null,"clientRecordVersion":null,"recordingMethod":null,"device":null,"lastModifiedTime":null,"count":100}"""
+
+        val batch = serializer.parseNdjson("$validHeader\n$recordWithNulls")
+        val record = batch.records.first() as CanonicalStepsRecord
+
+        assertEquals(100L, record.count)
+        org.junit.Assert.assertNull(record.startZoneOffset)
+        org.junit.Assert.assertNull(record.endZoneOffset)
+        org.junit.Assert.assertNull(record.metadata.clientRecordId)
+        org.junit.Assert.assertNull(record.metadata.clientRecordVersion)
+        org.junit.Assert.assertNull(record.metadata.recordingMethod)
+        org.junit.Assert.assertNull(record.metadata.device)
+        org.junit.Assert.assertNull(record.metadata.lastModifiedTime)
+    }
+
+    @Test
     fun rejectsRecordCountMismatch() {
         val headerClaiming2 = """{"recordType":"header","schemaVersion":1,"installationId":"i","batchId":"b","createdAt":"2026-08-30T00:00:00Z","timeWindow":{"startInclusive":"2026-08-29T00:00:00Z","endExclusive":"2026-08-30T00:00:00Z"},"recordCount":2,"recordTypes":["steps"]}"""
         val record1 = """{"recordType":"steps","recordId":"s1","origin":"com.mi.health","startTime":"2026-08-30T10:00:00Z","endTime":"2026-08-30T10:15:00Z","count":100}"""

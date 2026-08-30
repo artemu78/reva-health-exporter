@@ -208,8 +208,12 @@ class ExportBatchSerializer {
         val installationId = requiredString("installationId")
         val batchId = requiredString("batchId")
         val createdAt = requiredInstant("createdAt")
-        val windowObj = getAsJsonObject("timeWindow")
+        val windowEl = get("timeWindow")
             ?: throw InvalidExportSchemaException("Batch header missing 'timeWindow'")
+        if (!windowEl.isJsonObject) {
+            throw InvalidExportSchemaException("Field 'timeWindow' must be a JSON object")
+        }
+        val windowObj = windowEl.asJsonObject
         val timeWindow = TimeWindow(
             startInclusive = windowObj.requiredInstant("startInclusive"),
             endExclusive = windowObj.requiredInstant("endExclusive"),
@@ -239,12 +243,18 @@ class ExportBatchSerializer {
         val clientRecordId = optionalString("clientRecordId")
         val clientRecordVersion = optionalLong("clientRecordVersion")
         val recordingMethod = optionalInt("recordingMethod")
-        val device = get("device")?.takeUnless(JsonElement::isJsonNull)?.asJsonObject?.let { dev ->
-            DeviceMetadata(
-                manufacturer = dev.optionalString("manufacturer"),
-                model = dev.optionalString("model"),
-                type = dev.optionalInt("type"),
-            )
+        val deviceEl = get("device")
+        val device = when {
+            deviceEl == null || deviceEl.isJsonNull -> null
+            deviceEl.isJsonObject -> {
+                val dev = deviceEl.asJsonObject
+                DeviceMetadata(
+                    manufacturer = dev.optionalString("manufacturer"),
+                    model = dev.optionalString("model"),
+                    type = dev.optionalInt("type"),
+                )
+            }
+            else -> throw InvalidExportSchemaException("Field 'device' must be a JSON object")
         }
         val lastModifiedTime = optionalInstant("lastModifiedTime")
 
@@ -267,21 +277,29 @@ class ExportBatchSerializer {
                 metadata = metadata,
                 count = requiredLong("count"),
             )
-            CanonicalHeartRateRecord.TYPE -> CanonicalHeartRateRecord(
-                startTime = startTime,
-                startZoneOffset = startZoneOffset,
-                endTime = endTime,
-                endZoneOffset = endZoneOffset,
-                metadata = metadata,
-                samples = (getAsJsonArray("samples") ?: throw InvalidExportSchemaException("Missing 'samples' array"))
-                    .map { sampleEl ->
+            CanonicalHeartRateRecord.TYPE -> {
+                val samplesEl = get("samples") ?: throw InvalidExportSchemaException("Missing 'samples' array")
+                if (!samplesEl.isJsonArray) {
+                    throw InvalidExportSchemaException("Field 'samples' must be an array")
+                }
+                CanonicalHeartRateRecord(
+                    startTime = startTime,
+                    startZoneOffset = startZoneOffset,
+                    endTime = endTime,
+                    endZoneOffset = endZoneOffset,
+                    metadata = metadata,
+                    samples = samplesEl.asJsonArray.map { sampleEl ->
+                        if (!sampleEl.isJsonObject) {
+                            throw InvalidExportSchemaException("Heart rate sample must be a JSON object")
+                        }
                         val sampleObj = sampleEl.asJsonObject
                         HeartRateSample(
                             time = sampleObj.requiredInstant("time"),
                             beatsPerMinute = sampleObj.requiredLong("beatsPerMinute"),
                         )
                     },
-            )
+                )
+            }
             CanonicalDistanceRecord.TYPE -> CanonicalDistanceRecord(
                 startTime = startTime,
                 startZoneOffset = startZoneOffset,
@@ -298,50 +316,81 @@ class ExportBatchSerializer {
                 metadata = metadata,
                 energyKilocalories = requiredDouble("energyKilocalories"),
             )
-            CanonicalSleepSessionRecord.TYPE -> CanonicalSleepSessionRecord(
-                startTime = startTime,
-                startZoneOffset = startZoneOffset,
-                endTime = endTime,
-                endZoneOffset = endZoneOffset,
-                metadata = metadata,
-                title = optionalString("title"),
-                notes = optionalString("notes"),
-                stages = (getAsJsonArray("stages") ?: JsonArray()).map { stageEl ->
-                    val stageObj = stageEl.asJsonObject
-                    SleepStage(
-                        startTime = stageObj.requiredInstant("startTime"),
-                        endTime = stageObj.requiredInstant("endTime"),
-                        stage = stageObj.requiredInt("stage"),
-                    )
-                },
-            )
-            CanonicalExerciseSessionRecord.TYPE -> CanonicalExerciseSessionRecord(
-                startTime = startTime,
-                startZoneOffset = startZoneOffset,
-                endTime = endTime,
-                endZoneOffset = endZoneOffset,
-                metadata = metadata,
-                exerciseType = requiredInt("exerciseType"),
-                title = optionalString("title"),
-                notes = optionalString("notes"),
-                segments = (getAsJsonArray("segments") ?: JsonArray()).map { segEl ->
-                    val segObj = segEl.asJsonObject
-                    ExerciseSegmentModel(
-                        startTime = segObj.requiredInstant("startTime"),
-                        endTime = segObj.requiredInstant("endTime"),
-                        segmentType = segObj.requiredInt("segmentType"),
-                        repetitions = segObj.optionalInt("repetitions") ?: 0,
-                    )
-                },
-                laps = (getAsJsonArray("laps") ?: JsonArray()).map { lapEl ->
-                    val lapObj = lapEl.asJsonObject
-                    ExerciseLapModel(
-                        startTime = lapObj.requiredInstant("startTime"),
-                        endTime = lapObj.requiredInstant("endTime"),
-                        lengthMeters = lapObj.optionalDouble("lengthMeters"),
-                    )
-                },
-            )
+            CanonicalSleepSessionRecord.TYPE -> {
+                val stagesEl = get("stages")
+                val stagesList = when {
+                    stagesEl == null || stagesEl.isJsonNull -> emptyList()
+                    stagesEl.isJsonArray -> stagesEl.asJsonArray.map { stageEl ->
+                        if (!stageEl.isJsonObject) {
+                            throw InvalidExportSchemaException("Sleep stage must be a JSON object")
+                        }
+                        val stageObj = stageEl.asJsonObject
+                        SleepStage(
+                            startTime = stageObj.requiredInstant("startTime"),
+                            endTime = stageObj.requiredInstant("endTime"),
+                            stage = stageObj.requiredInt("stage"),
+                        )
+                    }
+                    else -> throw InvalidExportSchemaException("Field 'stages' must be an array")
+                }
+                CanonicalSleepSessionRecord(
+                    startTime = startTime,
+                    startZoneOffset = startZoneOffset,
+                    endTime = endTime,
+                    endZoneOffset = endZoneOffset,
+                    metadata = metadata,
+                    title = optionalString("title"),
+                    notes = optionalString("notes"),
+                    stages = stagesList,
+                )
+            }
+            CanonicalExerciseSessionRecord.TYPE -> {
+                val segmentsEl = get("segments")
+                val segmentsList = when {
+                    segmentsEl == null || segmentsEl.isJsonNull -> emptyList()
+                    segmentsEl.isJsonArray -> segmentsEl.asJsonArray.map { segEl ->
+                        if (!segEl.isJsonObject) {
+                            throw InvalidExportSchemaException("Exercise segment must be a JSON object")
+                        }
+                        val segObj = segEl.asJsonObject
+                        ExerciseSegmentModel(
+                            startTime = segObj.requiredInstant("startTime"),
+                            endTime = segObj.requiredInstant("endTime"),
+                            segmentType = segObj.requiredInt("segmentType"),
+                            repetitions = segObj.optionalInt("repetitions") ?: 0,
+                        )
+                    }
+                    else -> throw InvalidExportSchemaException("Field 'segments' must be an array")
+                }
+                val lapsEl = get("laps")
+                val lapsList = when {
+                    lapsEl == null || lapsEl.isJsonNull -> emptyList()
+                    lapsEl.isJsonArray -> lapsEl.asJsonArray.map { lapEl ->
+                        if (!lapEl.isJsonObject) {
+                            throw InvalidExportSchemaException("Exercise lap must be a JSON object")
+                        }
+                        val lapObj = lapEl.asJsonObject
+                        ExerciseLapModel(
+                            startTime = lapObj.requiredInstant("startTime"),
+                            endTime = lapObj.requiredInstant("endTime"),
+                            lengthMeters = lapObj.optionalDouble("lengthMeters"),
+                        )
+                    }
+                    else -> throw InvalidExportSchemaException("Field 'laps' must be an array")
+                }
+                CanonicalExerciseSessionRecord(
+                    startTime = startTime,
+                    startZoneOffset = startZoneOffset,
+                    endTime = endTime,
+                    endZoneOffset = endZoneOffset,
+                    metadata = metadata,
+                    exerciseType = requiredInt("exerciseType"),
+                    title = optionalString("title"),
+                    notes = optionalString("notes"),
+                    segments = segmentsList,
+                    laps = lapsList,
+                )
+            }
             CanonicalRestingHeartRateRecord.TYPE -> CanonicalRestingHeartRateRecord(
                 startTime = startTime,
                 startZoneOffset = startZoneOffset,
@@ -362,54 +411,126 @@ class ExportBatchSerializer {
         }
     }
 
-    private fun JsonObject.requiredString(name: String): String =
-        get(name)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
-            ?.takeIf(String::isNotBlank)
+    private fun JsonObject.requiredString(name: String): String {
+        val element = get(name) ?: throw InvalidExportSchemaException("Field '$name' is required")
+        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isString) {
+            throw InvalidExportSchemaException("Field '$name' must be a string")
+        }
+        return element.asString.takeIf(String::isNotBlank)
             ?: throw InvalidExportSchemaException("Field '$name' must be a non-blank string")
+    }
 
-    private fun JsonObject.optionalString(name: String): String? =
-        get(name)?.takeUnless(JsonElement::isJsonNull)
-            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
-            ?.takeIf(String::isNotBlank)
+    private fun JsonObject.optionalString(name: String): String? {
+        val element = get(name) ?: return null
+        if (element.isJsonNull) return null
+        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isString) {
+            throw InvalidExportSchemaException("Field '$name' must be a string")
+        }
+        return element.asString.takeIf(String::isNotBlank)
+    }
 
-    private fun JsonObject.requiredInt(name: String): Int =
-        get(name)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.let {
-            try {
-                it.asInt
-            } catch (e: Exception) {
-                throw InvalidExportSchemaException("Field '$name' must be an integer", e)
-            }
-        } ?: throw InvalidExportSchemaException("Field '$name' must be an integer")
+    private fun JsonObject.requiredInt(name: String): Int {
+        val element = get(name) ?: throw InvalidExportSchemaException("Field '$name' is required")
+        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isNumber) {
+            throw InvalidExportSchemaException("Field '$name' must be an integer number")
+        }
+        val bigDecimal = try {
+            element.asJsonPrimitive.asBigDecimal
+        } catch (e: Exception) {
+            throw InvalidExportSchemaException("Field '$name' must be an integer", e)
+        }
+        return try {
+            bigDecimal.intValueExact()
+        } catch (e: ArithmeticException) {
+            throw InvalidExportSchemaException("Field '$name' must be an exact integer without fraction or overflow: $bigDecimal", e)
+        }
+    }
 
-    private fun JsonObject.optionalInt(name: String): Int? =
-        get(name)?.takeUnless(JsonElement::isJsonNull)
-            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
+    private fun JsonObject.optionalInt(name: String): Int? {
+        val element = get(name) ?: return null
+        if (element.isJsonNull) return null
+        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isNumber) {
+            throw InvalidExportSchemaException("Field '$name' must be an integer number")
+        }
+        val bigDecimal = try {
+            element.asJsonPrimitive.asBigDecimal
+        } catch (e: Exception) {
+            throw InvalidExportSchemaException("Field '$name' must be an integer", e)
+        }
+        return try {
+            bigDecimal.intValueExact()
+        } catch (e: ArithmeticException) {
+            throw InvalidExportSchemaException("Field '$name' must be an exact integer without fraction or overflow: $bigDecimal", e)
+        }
+    }
 
-    private fun JsonObject.requiredLong(name: String): Long =
-        get(name)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.let {
-            try {
-                it.asLong
-            } catch (e: Exception) {
-                throw InvalidExportSchemaException("Field '$name' must be a number", e)
-            }
-        } ?: throw InvalidExportSchemaException("Field '$name' must be a number")
+    private fun JsonObject.requiredLong(name: String): Long {
+        val element = get(name) ?: throw InvalidExportSchemaException("Field '$name' is required")
+        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isNumber) {
+            throw InvalidExportSchemaException("Field '$name' must be an integer number")
+        }
+        val bigDecimal = try {
+            element.asJsonPrimitive.asBigDecimal
+        } catch (e: Exception) {
+            throw InvalidExportSchemaException("Field '$name' must be a number", e)
+        }
+        return try {
+            bigDecimal.longValueExact()
+        } catch (e: ArithmeticException) {
+            throw InvalidExportSchemaException("Field '$name' must be an exact integer without fraction or overflow: $bigDecimal", e)
+        }
+    }
 
-    private fun JsonObject.optionalLong(name: String): Long? =
-        get(name)?.takeUnless(JsonElement::isJsonNull)
-            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
+    private fun JsonObject.optionalLong(name: String): Long? {
+        val element = get(name) ?: return null
+        if (element.isJsonNull) return null
+        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isNumber) {
+            throw InvalidExportSchemaException("Field '$name' must be an integer number")
+        }
+        val bigDecimal = try {
+            element.asJsonPrimitive.asBigDecimal
+        } catch (e: Exception) {
+            throw InvalidExportSchemaException("Field '$name' must be a number", e)
+        }
+        return try {
+            bigDecimal.longValueExact()
+        } catch (e: ArithmeticException) {
+            throw InvalidExportSchemaException("Field '$name' must be an exact integer without fraction or overflow: $bigDecimal", e)
+        }
+    }
 
-    private fun JsonObject.requiredDouble(name: String): Double =
-        get(name)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.let {
-            try {
-                it.asDouble
-            } catch (e: Exception) {
-                throw InvalidExportSchemaException("Field '$name' must be a number", e)
-            }
-        } ?: throw InvalidExportSchemaException("Field '$name' must be a number")
+    private fun JsonObject.requiredDouble(name: String): Double {
+        val element = get(name) ?: throw InvalidExportSchemaException("Field '$name' is required")
+        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isNumber) {
+            throw InvalidExportSchemaException("Field '$name' must be a number")
+        }
+        val value = try {
+            element.asJsonPrimitive.asDouble
+        } catch (e: Exception) {
+            throw InvalidExportSchemaException("Field '$name' must be a number", e)
+        }
+        if (value.isNaN() || value.isInfinite()) {
+            throw InvalidExportSchemaException("Field '$name' must be finite, got $value")
+        }
+        return value
+    }
 
-    private fun JsonObject.optionalDouble(name: String): Double? =
-        get(name)?.takeUnless(JsonElement::isJsonNull)
-            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asDouble
+    private fun JsonObject.optionalDouble(name: String): Double? {
+        val element = get(name) ?: return null
+        if (element.isJsonNull) return null
+        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isNumber) {
+            throw InvalidExportSchemaException("Field '$name' must be a number")
+        }
+        val value = try {
+            element.asJsonPrimitive.asDouble
+        } catch (e: Exception) {
+            throw InvalidExportSchemaException("Field '$name' must be a number", e)
+        }
+        if (value.isNaN() || value.isInfinite()) {
+            throw InvalidExportSchemaException("Field '$name' must be finite, got $value")
+        }
+        return value
+    }
 
     private fun JsonObject.requiredInstant(name: String): Instant {
         val stringVal = requiredString(name)
@@ -438,9 +559,16 @@ class ExportBatchSerializer {
         }
     }
 
-    private fun JsonObject.requiredStrings(name: String): List<String> =
-        getAsJsonArray(name)?.map { element ->
-            element.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
-                ?: throw InvalidExportSchemaException("Array '$name' must contain string elements")
-        } ?: throw InvalidExportSchemaException("Field '$name' must be an array of strings")
+    private fun JsonObject.requiredStrings(name: String): List<String> {
+        val element = get(name) ?: throw InvalidExportSchemaException("Field '$name' is required")
+        if (!element.isJsonArray) {
+            throw InvalidExportSchemaException("Field '$name' must be an array of strings")
+        }
+        return element.asJsonArray.map { item ->
+            if (!item.isJsonPrimitive || !item.asJsonPrimitive.isString) {
+                throw InvalidExportSchemaException("Array '$name' must contain string elements")
+            }
+            item.asString
+        }
+    }
 }

@@ -101,8 +101,10 @@ data class HeartRateSample(
     val beatsPerMinute: Long,
 ) {
     init {
-        if (beatsPerMinute <= 0) {
-            throw InvalidExportSchemaException("Heart rate beatsPerMinute must be positive, got $beatsPerMinute")
+        if (beatsPerMinute !in 1L..300L) {
+            throw InvalidExportSchemaException(
+                "Heart rate beatsPerMinute must be in range 1..300, got $beatsPerMinute",
+            )
         }
     }
 }
@@ -305,8 +307,10 @@ data class CanonicalRestingHeartRateRecord(
 
     init {
         validate()
-        if (beatsPerMinute <= 0) {
-            throw InvalidExportSchemaException("Resting heart rate beatsPerMinute must be positive, got $beatsPerMinute")
+        if (beatsPerMinute !in 1L..300L) {
+            throw InvalidExportSchemaException(
+                "Resting heart rate beatsPerMinute must be in range 1..300, got $beatsPerMinute",
+            )
         }
     }
 
@@ -503,11 +507,18 @@ class HealthRecordMapper {
         val originPackage = dataOrigin.packageName.takeIf(String::isNotBlank)
             ?: throw InvalidExportSchemaException("Record dataOrigin must not be blank")
 
+        val resolvedClientRecordId = clientRecordId?.takeIf(String::isNotBlank)
+        val resolvedClientRecordVersion = if (resolvedClientRecordId != null) {
+            clientRecordVersion
+        } else {
+            null
+        }
+
         return RecordMetadata(
             recordId = recordId,
             origin = originPackage,
-            clientRecordId = clientRecordId?.takeIf(String::isNotBlank),
-            clientRecordVersion = clientRecordVersion.takeIf { it != 0L },
+            clientRecordId = resolvedClientRecordId,
+            clientRecordVersion = resolvedClientRecordVersion,
             recordingMethod = recordingMethod.takeIf { it != Metadata.RECORDING_METHOD_UNKNOWN },
             device = device?.let { dev ->
                 DeviceMetadata(
