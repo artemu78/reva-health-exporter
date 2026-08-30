@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        findViewById<TextView>(R.id.app_version).text = getString(R.string.app_version, BuildConfig.VERSION_NAME)
         restoredDiagnosticState(savedInstanceState)?.let { restored ->
             diagnosticPresenter.restore(restored)
             renderDiagnostic(restored)
