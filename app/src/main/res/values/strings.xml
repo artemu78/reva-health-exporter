@@ -20,4 +20,11 @@
     <string name="diagnostic_export_write_failed">The snapshot could not be written.</string>
     <string name="diagnostic_loading_description">Loading diagnostic results</string>
     <string name="diagnostic_preparing">Preparing diagnostic results…</string>
+    <string name="background_read_title">Background access</string>
+    <string name="background_probe_trigger">Test background read</string>
+    <string name="background_probe_trigger_description">Trigger background Health Connect read worker</string>
+    <string name="background_read_supported">Background reading: Supported</string>
+    <string name="background_read_unsupported">Background Health Connect reading is unsupported on Android 11. Unattended periodic exports will switch to user-triggered export.</string>
+    <string name="background_probe_running">Background read worker is enqueued. You can background the app now.</string>
+    <string name="background_probe_no_run">No background probe has run yet.</string>
 </resources>

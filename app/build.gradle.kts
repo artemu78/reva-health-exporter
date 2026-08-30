@@ -63,7 +63,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
     implementation("com.google.code.gson:gson:2.13.2")
 
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
+
     testImplementation("junit:junit:4.13.2")
+    testImplementation("androidx.work:work-testing:2.10.0")
     testImplementation("androidx.health.connect:connect-testing:1.0.0-alpha03") {
         exclude(group = "androidx.health.connect", module = "connect-client")
         exclude(group = "androidx.health.connect", module = "connect-client-proto")
@@ -72,4 +75,5 @@ dependencies {
     androidTestImplementation("androidx.test:core-ktx:1.7.0")
     androidTestImplementation("androidx.test.ext:junit-ktx:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.work:work-testing:2.10.0")
 }

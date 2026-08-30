@@ -19,9 +19,9 @@ class HealthConnectAvailabilityTest(
         @JvmStatic
         @Parameterized.Parameters(name = "SDK status {0} is {1}")
         fun states() = listOf(
-            arrayOf(ProviderSdkStatus.AVAILABLE, ProviderAvailability.AVAILABLE),
-            arrayOf(ProviderSdkStatus.UNAVAILABLE, ProviderAvailability.UNAVAILABLE),
-            arrayOf(ProviderSdkStatus.UPDATE_REQUIRED, ProviderAvailability.UPDATE_REQUIRED),
+            arrayOf<Any>(ProviderSdkStatus.AVAILABLE, ProviderAvailability.AVAILABLE),
+            arrayOf<Any>(ProviderSdkStatus.UNAVAILABLE, ProviderAvailability.UNAVAILABLE),
+            arrayOf<Any>(ProviderSdkStatus.UPDATE_REQUIRED, ProviderAvailability.UPDATE_REQUIRED),
         )
     }
 }

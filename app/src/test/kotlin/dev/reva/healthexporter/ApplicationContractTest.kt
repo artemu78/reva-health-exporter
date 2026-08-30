@@ -84,6 +84,7 @@ class ApplicationContractTest {
                 "android.permission.health.READ_TOTAL_CALORIES_BURNED",
                 "android.permission.health.READ_EXERCISE",
                 "android.permission.health.READ_OXYGEN_SATURATION",
+                "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND",
             ),
             permissions,
         )

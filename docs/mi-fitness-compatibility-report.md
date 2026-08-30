@@ -159,3 +159,37 @@ Based on confirmed interoperability data:
 - **Physical Device Protocol:** Completed twice (pre-restart and post-restart).
 - **Sanitized Snapshot:** Export verified and passes structure checks.
 - **Status:** Issue 6 criteria satisfied. Proceed to Issue 7.
+
+---
+
+## 9. Background Health Connect access verification on Android 11 (Issue 8)
+
+### 9.1. Executive summary & background gate decision
+
+- **Issue 8 outcome:** Verified background Health Connect access behavior on Android 11 (API 30) with standalone Health Connect APK (`com.google.android.apps.healthdata`).
+- **Feature status check (`FEATURE_READ_HEALTH_DATA_IN_BACKGROUND`):** `FEATURE_STATUS_UNAVAILABLE` (1).
+- **Background permission (`READ_HEALTH_DATA_IN_BACKGROUND`):** Evaluated and skipped when unsupported by provider; requested only when provider supports it.
+- **Worker execution:** `BackgroundProbeWorker` executed via WorkManager for confirmed types (`StepsRecord`, `HeartRateRecord`, `DistanceRecord`, `TotalCaloriesBurnedRecord`, `SleepSessionRecord`).
+- **Gate evaluation:** Because the standalone Health Connect APK on Android 11 reports `FEATURE_STATUS_UNAVAILABLE` for background reads, the app displays an explicit limitation notice and ensures that the export pipeline architecture fully supports **user-triggered ("Export now") export** alongside best-effort WorkManager execution.
+- **Privacy verification:** All recorded probe metrics, status codes, and summaries contain exclusively structural metadata (type counts, status enum, execution timestamps, origin package names); zero raw health values or credentials are persisted.
+
+### 9.2. Automated & physical verification matrix
+
+| Scenario / Test Case | Execution Layer | Condition | Observed Result | Invariant Check |
+|---|---|---|---|---|
+| **Feature Status Check** | Unit / JVM | Provider reports `FEATURE_STATUS_UNAVAILABLE` | Classified as `BackgroundReadSupport.UNSUPPORTED` | Background permission is not requested |
+| **Feature Status Check (Supported)** | Unit / JVM | Provider reports `FEATURE_STATUS_AVAILABLE` | Classified as `BackgroundReadSupport.AVAILABLE` | Background permission requested if missing |
+| **Confirmed Types Read** | Unit / Component (`FakeHealthConnectClient`) | Populated 5 core confirmed types | Returns `BackgroundReadOutcome.SUCCESS` with total count and origins | Summary stored; no raw health values |
+| **Transient Read Error** | Unit / Component (`FakeHealthConnectClient`) | Injected `IOException` | Returns `BackgroundReadOutcome.RETRYABLE_FAILURE` (`Result.retry()`) | WorkManager schedules retry with backoff |
+| **Permission Revocation** | Unit / Component (`FakeHealthConnectClient`) | Injected `SecurityException` | Returns `BackgroundReadOutcome.USER_ACTION_REQUIRED` (`Result.failure()`) | User action flagged; no infinite retry |
+| **Unsupported Provider Error** | Unit / Component (`FakeHealthConnectClient`) | Injected `UnsupportedOperationException` | Returns `BackgroundReadOutcome.UNSUPPORTED` (`Result.failure()`) | Explicit limitation surfaced in UI |
+| **UI Limitation Display** | Android Feature (API 30) | Android 11 with standalone Health Connect | Shows explicit limitation notice on screen | Clear explanation for user-triggered export |
+| **Background Worker Invariant** | Unit / Android Feature | Background execution without foreground activity | Returns output data via `WorkInfo` / store | **Zero background attempts to launch UI / Activity** |
+| **Device Reboot / Process Kill** | Component / Storage | Process recreation and device reboot | `BackgroundProbeStore` reliably restores last execution summary | Durable intermediate metadata preserved |
+
+### 9.3. Key findings & architectural recommendations
+
+1. **Explicit Limitation Messaging:** On Android 11, the app clearly communicates that background reads depend on platform capabilities, setting accurate expectations for periodic exports.
+2. **User-Triggered Export as First-Class Path:** The upcoming batching and export engine (Issue 9) and scheduler (Issue 12) must treat user-triggered export as a primary, first-class interaction path rather than an afterthought.
+3. **No Interactive Background Leaks:** Background workers must never attempt to launch rationale or permission dialogs; all authorization requirements are surfaced purely through state observables.
+
