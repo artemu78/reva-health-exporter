@@ -146,6 +146,7 @@ class ApplicationContractTest {
 
         assertEquals(
             setOf(
+                "android.permission.INTERNET",
                 "android.permission.health.READ_STEPS",
                 "android.permission.health.READ_HEART_RATE",
                 "android.permission.health.READ_RESTING_HEART_RATE",
@@ -165,6 +166,18 @@ class ApplicationContractTest {
             "com.google.android.apps.healthdata",
             packages.item(0).attributes.getNamedItem("android:name").nodeValue,
         )
+    }
+
+    @Test
+    fun `Google Drive export declares install-time internet access`() {
+        val manifest = projectDirectory.resolve("src/main/AndroidManifest.xml")
+        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(manifest.toFile())
+        val permissionNodes = document.getElementsByTagName("uses-permission")
+        val permissions = (0 until permissionNodes.length)
+            .map { permissionNodes.item(it).attributes.getNamedItem("android:name").nodeValue }
+            .toSet()
+
+        assertTrue("Google Drive export requires INTERNET permission", "android.permission.INTERNET" in permissions)
     }
 
     @Test
