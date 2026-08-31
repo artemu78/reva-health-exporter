@@ -2,15 +2,20 @@ package dev.reva.healthexporter
 
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.response.ReadRecordsResponse
 import androidx.health.connect.client.testing.FakeHealthConnectClient
 import androidx.health.connect.client.testing.stubs.Stub
+import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.units.Length
+import androidx.health.connect.client.units.Percentage
 import java.io.IOException
 import java.time.Instant
 import java.time.ZoneOffset
@@ -30,69 +35,230 @@ class HealthConnectExportReaderTest {
         endExclusive = Instant.parse("2026-08-30T00:00:00Z"),
     )
 
-    private fun createConfirmedRecords(): List<Record> = listOf<Record>(
-        StepsRecord(
-            startTime = Instant.parse("2026-08-29T08:00:00Z"),
-            startZoneOffset = ZoneOffset.UTC,
-            endTime = Instant.parse("2026-08-29T08:15:00Z"),
-            endZoneOffset = ZoneOffset.UTC,
-            count = 1500,
-            metadata = Metadata.manualEntry(clientRecordId = "steps_01"),
-        ),
-        HeartRateRecord(
-            startTime = Instant.parse("2026-08-29T08:00:00Z"),
-            startZoneOffset = ZoneOffset.UTC,
-            endTime = Instant.parse("2026-08-29T08:05:00Z"),
-            endZoneOffset = ZoneOffset.UTC,
-            samples = listOf(
-                HeartRateRecord.Sample(
-                    time = Instant.parse("2026-08-29T08:01:00Z"),
-                    beatsPerMinute = 72,
+    private suspend fun insertTrustedRecords(client: FakeHealthConnectClient) {
+        client.setPackageName("com.xiaomi.wearable")
+        client.insertRecords(
+            listOf<Record>(
+                StepsRecord(
+                    startTime = Instant.parse("2026-08-29T08:00:00Z"),
+                    startZoneOffset = ZoneOffset.UTC,
+                    endTime = Instant.parse("2026-08-29T08:15:00Z"),
+                    endZoneOffset = ZoneOffset.UTC,
+                    count = 1500,
+                    metadata = Metadata.manualEntry(clientRecordId = "steps_01"),
+                ),
+                HeartRateRecord(
+                    startTime = Instant.parse("2026-08-29T08:00:00Z"),
+                    startZoneOffset = ZoneOffset.UTC,
+                    endTime = Instant.parse("2026-08-29T08:05:00Z"),
+                    endZoneOffset = ZoneOffset.UTC,
+                    samples = listOf(
+                        HeartRateRecord.Sample(
+                            time = Instant.parse("2026-08-29T08:01:00Z"),
+                            beatsPerMinute = 72,
+                        ),
+                    ),
+                    metadata = Metadata.manualEntry(clientRecordId = "hr_01"),
+                ),
+                SleepSessionRecord(
+                    startTime = Instant.parse("2026-08-29T00:30:00Z"),
+                    startZoneOffset = ZoneOffset.UTC,
+                    endTime = Instant.parse("2026-08-29T07:30:00Z"),
+                    endZoneOffset = ZoneOffset.UTC,
+                    title = "Night sleep",
+                    metadata = Metadata.manualEntry(clientRecordId = "sleep_01"),
+                ),
+                OxygenSaturationRecord(
+                    time = Instant.parse("2026-08-29T08:10:00Z"),
+                    zoneOffset = ZoneOffset.UTC,
+                    percentage = Percentage(97.0),
+                    metadata = Metadata.manualEntry(clientRecordId = "oxygen_01"),
                 ),
             ),
-            metadata = Metadata.manualEntry(clientRecordId = "hr_01"),
-        ),
-        DistanceRecord(
-            startTime = Instant.parse("2026-08-29T08:00:00Z"),
-            startZoneOffset = ZoneOffset.UTC,
-            endTime = Instant.parse("2026-08-29T08:15:00Z"),
-            endZoneOffset = ZoneOffset.UTC,
-            distance = Length.meters(1200.0),
-            metadata = Metadata.manualEntry(clientRecordId = "dist_01"),
-        ),
-        TotalCaloriesBurnedRecord(
-            startTime = Instant.parse("2026-08-29T08:00:00Z"),
-            startZoneOffset = ZoneOffset.UTC,
-            endTime = Instant.parse("2026-08-29T08:15:00Z"),
-            endZoneOffset = ZoneOffset.UTC,
-            energy = Energy.kilocalories(85.0),
-            metadata = Metadata.manualEntry(clientRecordId = "cal_01"),
-        ),
-        SleepSessionRecord(
-            startTime = Instant.parse("2026-08-29T00:30:00Z"),
-            startZoneOffset = ZoneOffset.UTC,
-            endTime = Instant.parse("2026-08-29T07:30:00Z"),
-            endZoneOffset = ZoneOffset.UTC,
-            title = "Night sleep",
-            metadata = Metadata.manualEntry(clientRecordId = "sleep_01"),
-        ),
-    )
+        )
+
+        client.setPackageName("com.google.android.apps.fitness")
+        client.insertRecords(
+            listOf<Record>(
+                DistanceRecord(
+                    startTime = Instant.parse("2026-08-29T08:00:00Z"),
+                    startZoneOffset = ZoneOffset.UTC,
+                    endTime = Instant.parse("2026-08-29T08:15:00Z"),
+                    endZoneOffset = ZoneOffset.UTC,
+                    distance = Length.meters(1200.0),
+                    metadata = Metadata.manualEntry(clientRecordId = "dist_01"),
+                ),
+                TotalCaloriesBurnedRecord(
+                    startTime = Instant.parse("2026-08-29T08:00:00Z"),
+                    startZoneOffset = ZoneOffset.UTC,
+                    endTime = Instant.parse("2026-08-29T08:15:00Z"),
+                    endZoneOffset = ZoneOffset.UTC,
+                    energy = Energy.kilocalories(85.0),
+                    metadata = Metadata.manualEntry(clientRecordId = "cal_01"),
+                ),
+            ),
+        )
+    }
 
     @Test
     fun readerReadsAndMapsAllConfirmedTypes() = runBlocking {
         val client = FakeHealthConnectClient()
-        client.setPackageName("com.mi.health")
-        client.insertRecords(createConfirmedRecords())
+        insertTrustedRecords(client)
 
         val reader = HealthConnectExportReader(client = client)
         val records = reader.readRecords(window)
 
-        assertEquals(5, records.size)
+        assertEquals(6, records.size)
         val types = records.map { it.recordType }.toSet()
         assertEquals(
-            setOf("steps", "heart_rate", "distance", "total_calories_burned", "sleep_session"),
+            setOf(
+                "steps",
+                "heart_rate",
+                "distance",
+                "total_calories_burned",
+                "sleep_session",
+                "oxygen_saturation",
+            ),
             types,
         )
+    }
+
+    @Test
+    fun mixedOriginStepsExportsOnlyTheXiaomiRecordWithoutMergingIt() = runBlocking {
+        val client = FakeHealthConnectClient()
+        val start = Instant.parse("2026-08-29T08:00:00Z")
+        val end = Instant.parse("2026-08-29T08:15:00Z")
+
+        client.setPackageName("com.google.android.apps.fitness")
+        client.insertRecords(
+            listOf(
+                StepsRecord(
+                    startTime = start,
+                    startZoneOffset = ZoneOffset.UTC,
+                    endTime = end,
+                    endZoneOffset = ZoneOffset.UTC,
+                    count = 1_500,
+                    metadata = Metadata.manualEntry(clientRecordId = "google-steps"),
+                ),
+            ),
+        )
+        client.setPackageName("com.xiaomi.wearable")
+        client.insertRecords(
+            listOf(
+                StepsRecord(
+                    startTime = start,
+                    startZoneOffset = ZoneOffset.UTC,
+                    endTime = end,
+                    endZoneOffset = ZoneOffset.UTC,
+                    count = 1_500,
+                    metadata = Metadata.manualEntry(clientRecordId = "xiaomi-steps"),
+                ),
+            ),
+        )
+
+        val records = HealthConnectExportReader(
+            client = client,
+            supportedRecordTypes = listOf(StepsRecord::class),
+        ).readRecords(window)
+
+        assertEquals(1, records.size)
+        assertEquals("xiaomi-steps", records.single().metadata.clientRecordId)
+        assertEquals("com.xiaomi.wearable", records.single().metadata.origin)
+    }
+
+    @Test
+    fun disallowedOriginDoesNotFallBackWhenTrustedOriginHasNoRecords() = runBlocking {
+        val client = FakeHealthConnectClient()
+        client.setPackageName("com.google.android.apps.fitness")
+        client.insertRecords(
+            listOf(
+                StepsRecord(
+                    startTime = Instant.parse("2026-08-29T08:00:00Z"),
+                    startZoneOffset = ZoneOffset.UTC,
+                    endTime = Instant.parse("2026-08-29T08:15:00Z"),
+                    endZoneOffset = ZoneOffset.UTC,
+                    count = 900,
+                    metadata = Metadata.manualEntry(clientRecordId = "google-only-steps"),
+                ),
+            ),
+        )
+
+        val records = HealthConnectExportReader(
+            client = client,
+            supportedRecordTypes = listOf(StepsRecord::class),
+        ).readRecords(window)
+
+        assertTrue(records.isEmpty())
+    }
+
+    @Test
+    fun disallowedRecordReturnedByProviderIsStillRejected() = runBlocking {
+        val originClient = FakeHealthConnectClient()
+        originClient.setPackageName("com.google.android.apps.fitness")
+        originClient.insertRecords(
+            listOf(
+                StepsRecord(
+                    startTime = Instant.parse("2026-08-29T08:00:00Z"),
+                    startZoneOffset = ZoneOffset.UTC,
+                    endTime = Instant.parse("2026-08-29T08:15:00Z"),
+                    endZoneOffset = ZoneOffset.UTC,
+                    count = 900,
+                    metadata = Metadata.manualEntry(clientRecordId = "unexpected-google-steps"),
+                ),
+            ),
+        )
+        val disallowedRecord = originClient.readRecords(
+            ReadRecordsRequest(
+                StepsRecord::class,
+                TimeRangeFilter.between(window.startInclusive, window.endExclusive),
+            ),
+        ).records.single()
+        val client = FakeHealthConnectClient()
+        client.overrides.readRecords = Stub {
+            ReadRecordsResponse(records = listOf(disallowedRecord), pageToken = null)
+        }
+
+        val records = HealthConnectExportReader(
+            client = client,
+            supportedRecordTypes = listOf(StepsRecord::class),
+        ).readRecords(window)
+
+        assertTrue(records.isEmpty())
+    }
+
+    @Test
+    fun distinctXiaomiRecordsWithEquivalentValuesRemainSeparate() = runBlocking {
+        val client = FakeHealthConnectClient()
+        val start = Instant.parse("2026-08-29T08:00:00Z")
+        val end = Instant.parse("2026-08-29T08:15:00Z")
+        client.setPackageName("com.xiaomi.wearable")
+        client.insertRecords(
+            listOf(
+                StepsRecord(
+                    start,
+                    ZoneOffset.UTC,
+                    end,
+                    ZoneOffset.UTC,
+                    1_500,
+                    Metadata.manualEntry(clientRecordId = "xiaomi-steps-a"),
+                ),
+                StepsRecord(
+                    start,
+                    ZoneOffset.UTC,
+                    end,
+                    ZoneOffset.UTC,
+                    1_500,
+                    Metadata.manualEntry(clientRecordId = "xiaomi-steps-b"),
+                ),
+            ),
+        )
+
+        val records = HealthConnectExportReader(
+            client = client,
+            supportedRecordTypes = listOf(StepsRecord::class),
+        ).readRecords(window)
+
+        assertEquals(setOf("xiaomi-steps-a", "xiaomi-steps-b"), records.map { it.metadata.clientRecordId }.toSet())
     }
 
     @Test
@@ -107,7 +273,7 @@ class HealthConnectExportReaderTest {
     @Test
     fun readerDeduplicatesRecordsWithSameIdAndType() = runBlocking {
         val client = FakeHealthConnectClient()
-        client.setPackageName("com.mi.health")
+        client.setPackageName("com.xiaomi.wearable")
         val stepRecord1 = StepsRecord(
             startTime = Instant.parse("2026-08-29T08:00:00Z"),
             startZoneOffset = ZoneOffset.UTC,
@@ -136,7 +302,7 @@ class HealthConnectExportReaderTest {
     @Test
     fun readerHandlesPaginationCorrectly() = runBlocking {
         val client = FakeHealthConnectClient()
-        client.setPackageName("com.mi.health")
+        client.setPackageName("com.xiaomi.wearable")
         val stepRecords: List<Record> = (1..25).map { i ->
             StepsRecord(
                 startTime = Instant.parse("2026-08-29T08:00:00Z").plusSeconds((i * 60).toLong()),
@@ -159,7 +325,7 @@ class HealthConnectExportReaderTest {
     @Test
     fun exactWindowBoundariesAreRespected() = runBlocking {
         val client = FakeHealthConnectClient()
-        client.setPackageName("com.mi.health")
+        client.setPackageName("com.xiaomi.wearable")
         val recordAtStart = StepsRecord(
             startTime = window.startInclusive,
             startZoneOffset = ZoneOffset.UTC,

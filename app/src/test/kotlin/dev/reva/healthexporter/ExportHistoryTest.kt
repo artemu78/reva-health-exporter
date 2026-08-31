@@ -1,5 +1,8 @@
 package dev.reva.healthexporter
 
+import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.testing.FakeHealthConnectClient
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -138,6 +141,32 @@ class ExportHistoryTest {
         assertTrue(result is ManualBackfillResult.NoRecordsFound)
         assertTrue(destination.uploadedBatches.isEmpty())
         assertTrue(history.entries("destination-a").isEmpty())
+    }
+
+    @Test
+    fun manualBackfillUsesTrustedSourcePolicy() = runBlocking {
+        val client = FakeHealthConnectClient()
+        val start = Instant.parse("2026-08-30T08:00:00Z")
+        val end = Instant.parse("2026-08-30T09:00:00Z")
+        client.setPackageName("com.google.android.apps.fitness")
+        client.insertRecords(listOf(StepsRecord(start, null, end, null, 100, Metadata.manualEntry())))
+        client.setPackageName("com.xiaomi.wearable")
+        client.insertRecords(listOf(StepsRecord(start, null, end, null, 200, Metadata.manualEntry())))
+        val destination = RecordingDestination()
+        val coordinator = ManualBackfillCoordinator(
+            exportStateStore = InMemoryExportStateStore("installation-test"),
+            historyStore = InMemoryExportHistoryStore(),
+            recordReader = HealthConnectExportReader(client),
+            destination = destination,
+            destinationKey = "destination-a",
+        )
+
+        val result = coordinator.uploadDays(listOf(LocalDate.parse("2026-08-30")), moscow)
+
+        assertTrue(result is ManualBackfillResult.Success)
+        val exported = destination.uploadedBatches.single().records.single() as CanonicalStepsRecord
+        assertEquals(200L, exported.count)
+        assertEquals("com.xiaomi.wearable", exported.metadata.origin)
     }
 
     @Test

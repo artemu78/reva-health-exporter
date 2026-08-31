@@ -1,24 +1,14 @@
 package dev.reva.healthexporter
 
 import androidx.health.connect.client.HealthConnectClient
-import androidx.health.connect.client.records.DistanceRecord
-import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.Record
-import androidx.health.connect.client.records.SleepSessionRecord
-import androidx.health.connect.client.records.StepsRecord
-import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
+import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import java.util.concurrent.CancellationException
 import kotlin.reflect.KClass
 
-val DEFAULT_EXPORT_TYPES: List<KClass<out Record>> = listOf(
-    StepsRecord::class,
-    HeartRateRecord::class,
-    DistanceRecord::class,
-    TotalCaloriesBurnedRecord::class,
-    SleepSessionRecord::class,
-)
+val DEFAULT_EXPORT_TYPES: List<KClass<out Record>> = ExportSourcePolicy.recordTypes
 
 fun interface HealthExportRecordReader {
     suspend fun readRecords(timeWindow: TimeWindow): List<CanonicalRecord>
@@ -54,6 +44,7 @@ class HealthConnectExportReader(
     ) {
         var pageToken: String? = null
         val seenPageTokens = mutableSetOf<String>()
+        val allowedPackageName = ExportSourcePolicy.allowedPackageName(recordType)
 
         do {
             val response = client.readRecords(
@@ -63,12 +54,21 @@ class HealthConnectExportReader(
                         timeWindow.startInclusive,
                         timeWindow.endExclusive,
                     ),
+                    dataOriginFilter = setOf(
+                        DataOrigin(allowedPackageName),
+                    ),
                     pageSize = pageSize,
                     pageToken = pageToken,
                 ),
             )
 
-            extractRecordsFromPage(response.records, timeWindow, seenRecordKeys, destination)
+            extractRecordsFromPage(
+                response.records,
+                allowedPackageName,
+                timeWindow,
+                seenRecordKeys,
+                destination,
+            )
 
             pageToken = response.pageToken?.takeIf(String::isNotEmpty)
             if (pageToken != null && !seenPageTokens.add(pageToken)) {
@@ -79,11 +79,13 @@ class HealthConnectExportReader(
 
     private fun extractRecordsFromPage(
         records: List<Record>,
+        allowedPackageName: String,
         timeWindow: TimeWindow,
         seenRecordKeys: MutableSet<Pair<String, String>>,
         destination: MutableList<CanonicalRecord>,
     ) {
         for (record in records) {
+            if (record.metadata.dataOrigin.packageName != allowedPackageName) continue
             val canonical = mapper.mapRecord(record)
             if (!canonical.startTime.isBefore(timeWindow.startInclusive) &&
                 canonical.startTime.isBefore(timeWindow.endExclusive)
