@@ -11,6 +11,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.util.zip.GZIPInputStream
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -148,10 +149,16 @@ class ExportBatchSerializerTest {
         assertEquals(fullBatch.records.size, parsed.records.size)
 
         // Compare each record in parsed batch
-        fullBatch.records.forEachIndexed { index, expected ->
-            val actual = parsed.records.firstOrNull { it.metadata.recordId == expected.metadata.recordId }
-            assertNotNull("Missing record ${expected.metadata.recordId}", actual)
-            assertEquals(expected, actual)
+        fullBatch.records.forEach { expected ->
+            val actual = parsed.records.firstOrNull { it.recordType == expected.recordType && it.startTime == expected.startTime }
+            assertNotNull("Missing record ${expected.recordType}", actual)
+            assertEquals(expected.recordType, actual!!.recordType)
+            assertEquals(expected.metadata.origin, actual.metadata.origin)
+            assertEquals(expected.startTime, actual.startTime)
+            assertEquals(expected.endTime, actual.endTime)
+            org.junit.Assert.assertNull(actual.metadata.recordId)
+            org.junit.Assert.assertNull(actual.metadata.device)
+            org.junit.Assert.assertNull(actual.metadata.clientRecordId)
         }
     }
 
@@ -209,8 +216,10 @@ class ExportBatchSerializerTest {
         assertEquals(fullBatch.header, parsedFromGzip.header)
         assertEquals(fullBatch.records.size, parsedFromGzip.records.size)
         fullBatch.records.forEach { expected ->
-            val actual = parsedFromGzip.records.first { it.metadata.recordId == expected.metadata.recordId }
-            assertEquals(expected, actual)
+            val actual = parsedFromGzip.records.first { it.recordType == expected.recordType && it.startTime == expected.startTime }
+            assertEquals(expected.recordType, actual.recordType)
+            assertEquals(expected.metadata.origin, actual.metadata.origin)
+            org.junit.Assert.assertNull(actual.metadata.recordId)
         }
     }
 
@@ -336,12 +345,186 @@ class ExportBatchSerializerTest {
     }
 
     @Test
-    fun rejectsRecordCountMismatch() {
-        val headerClaiming2 = """{"recordType":"header","schemaVersion":1,"installationId":"i","batchId":"b","createdAt":"2026-08-30T00:00:00Z","timeWindow":{"startInclusive":"2026-08-29T00:00:00Z","endExclusive":"2026-08-30T00:00:00Z"},"recordCount":2,"recordTypes":["steps"]}"""
-        val record1 = """{"recordType":"steps","recordId":"s1","origin":"com.mi.health","startTime":"2026-08-30T10:00:00Z","endTime":"2026-08-30T10:15:00Z","count":100}"""
+    fun serializesAndParsesJsonBatchWithAllConfirmedTypes() {
+        val json = serializer.serializeToJson(fullBatch)
+        assertTrue(json.isNotBlank())
 
-        assertThrows(InvalidExportSchemaException::class.java) {
-            serializer.parseNdjson("$headerClaiming2\n$record1")
+        val parsed = serializer.parseJson(json)
+        assertEquals(fullBatch.header, parsed.header)
+        assertEquals(fullBatch.records.size, parsed.records.size)
+
+        // Compare each record in parsed batch
+        fullBatch.records.forEach { expected ->
+            val actual = parsed.records.firstOrNull { it.recordType == expected.recordType && it.startTime == expected.startTime }
+            assertNotNull("Missing record ${expected.recordType}", actual)
+            assertEquals(expected.recordType, actual!!.recordType)
+            assertEquals(expected.metadata.origin, actual.metadata.origin)
+            assertEquals(expected.startTime, actual.startTime)
+            assertEquals(expected.startZoneOffset, actual.startZoneOffset)
+            assertEquals(expected.endTime, actual.endTime)
+            assertEquals(expected.endZoneOffset, actual.endZoneOffset)
+            org.junit.Assert.assertNull(actual.metadata.recordId)
+            org.junit.Assert.assertNull(actual.metadata.device)
+            org.junit.Assert.assertNull(actual.metadata.clientRecordId)
+            org.junit.Assert.assertNull(actual.metadata.recordingMethod)
         }
+    }
+
+    @Test
+    fun serializesAndParsesEmptyJsonBatch() {
+        val emptyBatch = ExportBatch(
+            header = BatchHeader(
+                schemaVersion = 1,
+                installationId = "inst-empty",
+                batchId = "batch-empty",
+                createdAt = Instant.parse("2026-08-30T12:00:00Z"),
+                timeWindow = TimeWindow(
+                    startInclusive = Instant.parse("2026-08-29T00:00:00Z"),
+                    endExclusive = Instant.parse("2026-08-30T00:00:00Z"),
+                ),
+                recordCount = 0,
+                recordTypes = emptyList(),
+            ),
+            records = emptyList(),
+        )
+
+        val json = serializer.serializeToJson(emptyBatch)
+        val parsed = serializer.parseJson(json)
+        assertEquals(emptyBatch, parsed)
+    }
+
+    @Test
+    fun jsonSerializationIsDeterministic() {
+        val json1 = serializer.serializeToJson(fullBatch)
+        val json2 = serializer.serializeToJson(fullBatch)
+        assertEquals(json1, json2)
+
+        // Out of order records in input batch should be serialized in stable sorted order
+        val reversedBatch = fullBatch.copy(records = fullBatch.records.reversed())
+        val jsonReversed = serializer.serializeToJson(reversedBatch)
+        assertEquals(json1, jsonReversed)
+    }
+
+    @Test
+    fun strippedFieldsAreNeverSerializedIntoOutputJson() {
+        val json = serializer.serializeToJson(fullBatch)
+
+        // Metadata and provenance fields that must be stripped from JSON records
+        assertFalse("Output JSON must not contain 'device' key", json.contains("\"device\""))
+        assertFalse("Output JSON must not contain 'recordId' key", json.contains("\"recordId\""))
+        assertFalse("Output JSON must not contain 'clientRecordId' key", json.contains("\"clientRecordId\""))
+        assertFalse("Output JSON must not contain 'recordingMethod' key", json.contains("\"recordingMethod\""))
+        assertFalse("Output JSON must not contain 'clientRecordVersion' key", json.contains("\"clientRecordVersion\""))
+        assertFalse("Output JSON must not contain 'lastModifiedTime' key", json.contains("\"lastModifiedTime\""))
+        assertFalse("Output JSON must not contain 'manufacturer'", json.contains("Xiaomi"))
+        assertFalse("Output JSON must not contain 'model'", json.contains("Smart Band 9"))
+
+        // Essential header and timing/origin fields must be preserved
+        assertTrue("Output JSON must contain 'schemaVersion'", json.contains("\"schemaVersion\":1"))
+        assertTrue("Output JSON must contain 'installationId'", json.contains("\"installationId\":\"inst-pseudo-uuid-1\""))
+        assertTrue("Output JSON must contain 'batchId'", json.contains("\"batchId\":\"batch-uuid-001\""))
+        assertTrue("Output JSON must contain 'origin'", json.contains("\"origin\":\"com.mi.health\""))
+        assertTrue("Output JSON must contain 'startTime'", json.contains("\"startTime\":\"2026-08-29T08:00:00Z\""))
+        assertTrue("Output JSON must contain 'count'", json.contains("\"count\":1500"))
+    }
+
+    @Test
+    fun rejectsEmptyOrBlankJson() {
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseJson("")
+        }
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseJson("   \n\n  ")
+        }
+    }
+
+    @Test
+    fun rejectsMissingHeaderOrRecordsInJson() {
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseJson("""{"records":[]}""")
+        }
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseJson("""{"header":{}}""")
+        }
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseJson("""{invalid-json}""")
+        }
+    }
+
+    @Test
+    fun rejectsRecordCountMismatchInJson() {
+        val json = """
+            {
+              "header": {
+                "schemaVersion": 1,
+                "installationId": "i",
+                "batchId": "b",
+                "createdAt": "2026-08-30T00:00:00Z",
+                "timeWindow": {
+                  "startInclusive": "2026-08-29T00:00:00Z",
+                  "endExclusive": "2026-08-30T00:00:00Z"
+                },
+                "recordCount": 2,
+                "recordTypes": ["steps"]
+              },
+              "records": [
+                {
+                  "recordType": "steps",
+                  "origin": "com.mi.health",
+                  "startTime": "2026-08-29T08:00:00Z",
+                  "endTime": "2026-08-29T08:15:00Z",
+                  "count": 100
+                }
+              ]
+            }
+        """.trimIndent()
+        assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseJson(json)
+        }
+    }
+
+    @Test
+    fun jsonSerializationDeterministicForSameTimeRecordsWithNullIds() {
+        val window = TimeWindow(
+            startInclusive = Instant.parse("2026-08-29T00:00:00Z"),
+            endExclusive = Instant.parse("2026-08-30T00:00:00Z"),
+        )
+        val rec1 = CanonicalStepsRecord(
+            startTime = Instant.parse("2026-08-29T08:00:00Z"),
+            startZoneOffset = ZoneOffset.UTC,
+            endTime = Instant.parse("2026-08-29T08:15:00Z"),
+            endZoneOffset = ZoneOffset.UTC,
+            metadata = RecordMetadata(origin = "com.mi.health"),
+            count = 100,
+        )
+        val rec2 = CanonicalStepsRecord(
+            startTime = Instant.parse("2026-08-29T08:00:00Z"),
+            startZoneOffset = ZoneOffset.UTC,
+            endTime = Instant.parse("2026-08-29T08:15:00Z"),
+            endZoneOffset = ZoneOffset.UTC,
+            metadata = RecordMetadata(origin = "com.mi.health"),
+            count = 200,
+        )
+        val batch1 = ExportBatch(
+            header = BatchHeader(
+                schemaVersion = 1,
+                installationId = "inst-tie",
+                batchId = "batch-tie",
+                createdAt = Instant.parse("2026-08-30T00:00:00Z"),
+                timeWindow = window,
+                recordCount = 2,
+                recordTypes = listOf("steps"),
+            ),
+            records = listOf(rec1, rec2),
+        )
+        val batch2 = batch1.copy(records = listOf(rec2, rec1))
+
+        val json1 = serializer.serializeToJson(batch1)
+        val json2 = serializer.serializeToJson(batch2)
+        assertEquals(json1, json2)
+
+        val ndjson1 = serializer.serializeToNdjson(batch1)
+        val ndjson2 = serializer.serializeToNdjson(batch2)
+        assertEquals(ndjson1, ndjson2)
     }
 }

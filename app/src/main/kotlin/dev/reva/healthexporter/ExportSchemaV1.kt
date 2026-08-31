@@ -39,7 +39,7 @@ data class DeviceMetadata(
 )
 
 data class RecordMetadata(
-    val recordId: String,
+    val recordId: String? = null,
     val origin: String,
     val clientRecordId: String? = null,
     val clientRecordVersion: Long? = null,
@@ -48,7 +48,7 @@ data class RecordMetadata(
     val lastModifiedTime: Instant? = null,
 ) {
     init {
-        if (recordId.isBlank()) {
+        if (recordId != null && recordId.isBlank()) {
             throw InvalidExportSchemaException("Record ID must not be blank")
         }
         if (origin.isBlank()) {

@@ -24,6 +24,57 @@ open class ExportBatchSerializer {
         .setStrictness(Strictness.STRICT)
         .create()
 
+    open fun serializeToJson(batch: ExportBatch): String {
+        val root = JsonObject().apply {
+            add("header", batch.header.toJson())
+            val sortedRecords = batch.records.sortedWith(
+                compareBy(
+                    { it.startTime },
+                    { it.recordType },
+                    { it.endTime },
+                    { it.metadata.recordId ?: it.metadata.clientRecordId ?: "" },
+                    { it.toJson().toString() },
+                ),
+            )
+            val recordsArray = JsonArray()
+            for (record in sortedRecords) {
+                recordsArray.add(record.toJson())
+            }
+            add("records", recordsArray)
+        }
+        return gson.toJson(root)
+    }
+
+    open fun parseJson(json: String): ExportBatch {
+        if (json.isBlank()) {
+            throw InvalidExportSchemaException("JSON input must not be empty or blank")
+        }
+        val root = try {
+            gson.fromJson(json, JsonObject::class.java)
+                ?: throw InvalidExportSchemaException("JSON root must be a valid JSON object")
+        } catch (e: JsonParseException) {
+            throw InvalidExportSchemaException("Failed to parse batch JSON", e)
+        } catch (e: IllegalStateException) {
+            throw InvalidExportSchemaException("Batch JSON root must be a JSON object", e)
+        }
+
+        val headerObj = root.getAsJsonObject("header")
+            ?: if (root.has("schemaVersion") && root.has("records")) root else throw InvalidExportSchemaException("Batch JSON missing 'header' object")
+        val header = headerObj.toBatchHeader()
+
+        val recordsArray = root.getAsJsonArray("records")
+            ?: throw InvalidExportSchemaException("Batch JSON missing 'records' array")
+
+        val records = recordsArray.map { element ->
+            if (!element.isJsonObject) {
+                throw InvalidExportSchemaException("Record item in 'records' array must be a JSON object")
+            }
+            element.asJsonObject.toCanonicalRecord()
+        }
+
+        return ExportBatch(header = header, records = records)
+    }
+
     open fun serializeToNdjson(batch: ExportBatch): String {
         val builder = StringBuilder()
         builder.append(gson.toJson(batch.header.toJson())).append('\n')
@@ -32,7 +83,9 @@ open class ExportBatchSerializer {
             compareBy(
                 { it.startTime },
                 { it.recordType },
-                { it.metadata.recordId },
+                { it.endTime },
+                { it.metadata.recordId ?: it.metadata.clientRecordId ?: "" },
+                { it.toJson().toString() },
             ),
         )
         for (record in sortedRecords) {
@@ -115,23 +168,11 @@ open class ExportBatchSerializer {
 
     private fun CanonicalRecord.toJson(): JsonObject = JsonObject().apply {
         addProperty("recordType", recordType)
-        addProperty("recordId", metadata.recordId)
         addProperty("origin", metadata.origin)
         addProperty("startTime", startTime.toString())
         startZoneOffset?.let { addProperty("startZoneOffset", it.toString()) }
         addProperty("endTime", endTime.toString())
         endZoneOffset?.let { addProperty("endZoneOffset", it.toString()) }
-        metadata.clientRecordId?.let { addProperty("clientRecordId", it) }
-        metadata.clientRecordVersion?.let { addProperty("clientRecordVersion", it) }
-        metadata.recordingMethod?.let { addProperty("recordingMethod", it) }
-        metadata.device?.let { dev ->
-            add("device", JsonObject().apply {
-                dev.manufacturer?.let { addProperty("manufacturer", it) }
-                dev.model?.let { addProperty("model", it) }
-                dev.type?.let { addProperty("type", it) }
-            })
-        }
-        metadata.lastModifiedTime?.let { addProperty("lastModifiedTime", it.toString()) }
 
         when (this@toJson) {
             is CanonicalStepsRecord -> {
@@ -200,8 +241,8 @@ open class ExportBatchSerializer {
     }
 
     private fun JsonObject.toBatchHeader(): BatchHeader {
-        val type = requiredString("recordType")
-        if (type != "header") {
+        val type = optionalString("recordType")
+        if (type != null && type != "header") {
             throw InvalidExportSchemaException("Expected recordType 'header', got '$type'")
         }
         val schemaVersion = requiredInt("schemaVersion")
@@ -234,12 +275,12 @@ open class ExportBatchSerializer {
 
     private fun JsonObject.toCanonicalRecord(): CanonicalRecord {
         val recordType = requiredString("recordType")
-        val recordId = requiredString("recordId")
         val origin = requiredString("origin")
         val startTime = requiredInstant("startTime")
         val startZoneOffset = optionalZoneOffset("startZoneOffset")
         val endTime = requiredInstant("endTime")
         val endZoneOffset = optionalZoneOffset("endZoneOffset")
+        val recordId = optionalString("recordId")
         val clientRecordId = optionalString("clientRecordId")
         val clientRecordVersion = optionalLong("clientRecordVersion")
         val recordingMethod = optionalInt("recordingMethod")

@@ -88,7 +88,7 @@ class HealthConnectExportReader(
             if (!canonical.startTime.isBefore(timeWindow.startInclusive) &&
                 canonical.startTime.isBefore(timeWindow.endExclusive)
             ) {
-                val key = canonical.recordType to (canonical.metadata.clientRecordId ?: canonical.metadata.recordId)
+                val key = canonical.recordType to (canonical.metadata.clientRecordId ?: canonical.metadata.recordId ?: "")
                 if (seenRecordKeys.add(key)) {
                     destination.add(canonical)
                 }

@@ -105,7 +105,7 @@ class GoogleDriveDestinationTest {
         assertEquals(4, gateway.files.filter { it.mimeType == FakeGoogleDriveGateway.FOLDER_MIME_TYPE }.size)
 
         // Uploaded file should be placed in the existing month folder
-        val uploadedFile = gateway.files.find { it.mimeType == "application/gzip" }
+        val uploadedFile = gateway.files.find { it.mimeType == "application/json" }
         assertNotNull(uploadedFile)
         assertTrue(uploadedFile!!.parents.contains(month.id))
     }
@@ -143,7 +143,7 @@ class GoogleDriveDestinationTest {
     // 2. Upload tests for success, authorization failure, forbidden, rate limit, transient server error, timeout
 
     @Test
-    fun `upload success creates compressed batch with metadata and stable appProperties`() = runBlocking {
+    fun `upload success creates uncompressed json batch with metadata and stable appProperties`() = runBlocking {
         val gateway = FakeGoogleDriveGateway()
         val destination = GoogleDriveDestination(driveGateway = gateway)
         val batch = createSampleBatch(
@@ -160,15 +160,15 @@ class GoogleDriveDestinationTest {
 
         val uploadedFile = gateway.files.find { it.id == success.location }
         assertNotNull("Uploaded file must exist in gateway", uploadedFile)
-        assertEquals("2026-08-29T000000Z--2026-08-30T000000Z--batch-stable-xyz.ndjson.gz", uploadedFile!!.name)
-        assertEquals("application/gzip", uploadedFile.mimeType)
+        assertEquals("2026-08-29T000000Z--2026-08-30T000000Z--batch-stable-xyz.json", uploadedFile!!.name)
+        assertEquals("application/json", uploadedFile.mimeType)
         assertEquals("batch-stable-xyz", uploadedFile.appProperties["batchId"])
         assertEquals("inst-007", uploadedFile.appProperties["installationId"])
         assertEquals("1", uploadedFile.appProperties["schemaVersion"])
     }
 
     @Test
-    fun `downloaded gzip batch decompresses and passes schema validation`() = runBlocking {
+    fun `downloaded json batch parses directly and passes schema validation`() = runBlocking {
         val gateway = FakeGoogleDriveGateway()
         val destination = GoogleDriveDestination(driveGateway = gateway)
         val batch = createSampleBatch()
@@ -181,8 +181,9 @@ class GoogleDriveDestinationTest {
         val downloadedBytes = gateway.downloadFile(success.location!!)
         assertTrue("Downloaded bytes must not be empty", downloadedBytes.isNotEmpty())
 
-        // Decompress and parse
-        val parsedBatch = serializer.decompressAndParse(downloadedBytes)
+        // Parse standard JSON
+        val jsonText = String(downloadedBytes, Charsets.UTF_8)
+        val parsedBatch = serializer.parseJson(jsonText)
         assertEquals(batch.header.batchId, parsedBatch.header.batchId)
         assertEquals(batch.header.installationId, parsedBatch.header.installationId)
         assertEquals(batch.header.schemaVersion, parsedBatch.header.schemaVersion)
@@ -193,7 +194,7 @@ class GoogleDriveDestinationTest {
         // Validate records
         val steps = parsedBatch.records.filterIsInstance<CanonicalStepsRecord>().first()
         assertEquals(2500L, steps.count)
-        assertEquals("rec-steps-1", steps.metadata.recordId)
+        assertEquals("com.mi.health", steps.metadata.origin)
 
         val hr = parsedBatch.records.filterIsInstance<CanonicalHeartRateRecord>().first()
         assertEquals(2, hr.samples.size)
@@ -289,7 +290,7 @@ class GoogleDriveDestinationTest {
         assertTrue(failure.isRetryable)
 
         // Verify the file was indeed written on the remote server
-        assertEquals(1, gateway.files.filter { it.mimeType == "application/gzip" }.size)
+        assertEquals(1, gateway.files.filter { it.mimeType == "application/json" }.size)
 
         // Retry with the same batch: destination must detect existing file and return Success without uploading a duplicate
         val retryResult = destination.upload(batch)
@@ -298,7 +299,7 @@ class GoogleDriveDestinationTest {
         assertEquals("batch-indeterminate-001", success.batchId)
 
         // Invariant: still exactly 1 batch file in Drive
-        val uploadedFiles = gateway.files.filter { it.mimeType == "application/gzip" }
+        val uploadedFiles = gateway.files.filter { it.mimeType == "application/json" }
         assertEquals(1, uploadedFiles.size)
         assertEquals("batch-indeterminate-001", uploadedFiles.first().appProperties["batchId"])
     }
@@ -324,7 +325,7 @@ class GoogleDriveDestinationTest {
         assertEquals(result1.location, (result2 as UploadResult.Success).location)
         assertEquals(result1.location, (result3 as UploadResult.Success).location)
 
-        val batchFiles = gateway.files.filter { it.mimeType == "application/gzip" }
+        val batchFiles = gateway.files.filter { it.mimeType == "application/json" }
         assertEquals("Exactly one file should exist in Drive for the batch", 1, batchFiles.size)
     }
 
@@ -349,14 +350,14 @@ class GoogleDriveDestinationTest {
         assertTrue(resultB is UploadResult.Success)
 
         // Account A's Drive has only batch A and cannot find batch B
-        val filesA = gatewayAccountA.files.filter { it.mimeType == "application/gzip" }
+        val filesA = gatewayAccountA.files.filter { it.mimeType == "application/json" }
         assertEquals(1, filesA.size)
         assertEquals("batch-account-A", filesA.first().appProperties["batchId"])
         val lookupBInA = gatewayAccountA.findFiles(appProperties = mapOf("batchId" to "batch-account-B"))
         assertTrue("Account A must not find Account B's batch", lookupBInA.isEmpty())
 
         // Account B's Drive has only batch B and cannot find batch A
-        val filesB = gatewayAccountB.files.filter { it.mimeType == "application/gzip" }
+        val filesB = gatewayAccountB.files.filter { it.mimeType == "application/json" }
         assertEquals(1, filesB.size)
         assertEquals("batch-account-B", filesB.first().appProperties["batchId"])
         val lookupAInB = gatewayAccountB.findFiles(appProperties = mapOf("batchId" to "batch-account-A"))
@@ -435,7 +436,7 @@ class GoogleDriveDestinationTest {
         assertEquals("batch-coord-drive-01", success.batch.header.batchId)
 
         // Verify file in Drive
-        val driveFiles = gateway.files.filter { it.mimeType == "application/gzip" }
+        val driveFiles = gateway.files.filter { it.mimeType == "application/json" }
         assertEquals(1, driveFiles.size)
         assertEquals("batch-coord-drive-01", driveFiles.first().appProperties["batchId"])
 
