@@ -275,62 +275,127 @@ class ManualBackfillCoordinator(
     private val clock: DiagnosticClock = SystemDiagnosticClock,
     private val pendingStore: ManualBackfillPendingStore = InMemoryManualBackfillPendingStore(),
 ) {
+    private sealed interface WindowUploadResult {
+        data class Confirmed(val entry: ExportHistoryEntry) : WindowUploadResult
+        data object Empty : WindowUploadResult
+        data class Stopped(val result: ManualBackfillResult) : WindowUploadResult
+    }
+
+    private sealed interface BatchPreparation {
+        data class Ready(val batch: ExportBatch) : BatchPreparation
+        data object Empty : BatchPreparation
+        data class Stopped(val result: ManualBackfillResult) : BatchPreparation
+    }
+
+    private sealed interface RecordReadResult {
+        data class Success(val records: List<CanonicalRecord>) : RecordReadResult
+        data class Failure(val message: String) : RecordReadResult
+    }
+
     suspend fun uploadDays(dates: List<LocalDate>, zoneId: ZoneId): ManualBackfillResult {
         require(dates.isNotEmpty())
         val confirmed = mutableListOf<ExportHistoryEntry>()
         val emptyDates = mutableListOf<LocalDate>()
         for (date in dates.distinct().sorted()) {
             val day = localDayWindow(date, zoneId)
-            val missing = missingIntervals(day, historyStore.entries(destinationKey))
-            for (window in missing) {
-                val id = stableBackfillBatchId(destinationKey, window)
-                val existing = historyStore.entries(destinationKey).firstOrNull { it.batchId == id }
-                val now = clock.now(zoneId).toInstant()
-                val persistedBatch = pendingStore.get(destinationKey, id)
-                val records = if (persistedBatch == null) {
-                    try {
-                        recordReader.readRecords(window).distinctBy { it.recordType to (it.metadata.clientRecordId ?: it.metadata.recordId) }
-                    } catch (cancellation: CancellationException) {
-                        throw cancellation
-                    } catch (e: Exception) {
-                        return ManualBackfillResult.Retrying(id, "Health Connect read failed: ${e.message ?: "read error"}")
-                    }
-                } else persistedBatch.records
-                if (records.isEmpty()) {
-                    if (existing == null) emptyDates += date
-                    continue
-                }
-                val pending = ExportHistoryEntry(id, window, HistoryBatchStatus.PENDING, destinationKey, now)
-                historyStore.upsert(pending)
-                val batch = persistedBatch ?: ExportBatch(
-                    BatchHeader(
-                        installationId = exportStateStore.getInstallationId(),
-                        batchId = id,
-                        createdAt = now,
-                        timeWindow = window,
-                        recordCount = records.size,
-                        recordTypes = records.map { it.recordType }.distinct().sorted(),
-                    ),
-                    records,
-                )
-                if (persistedBatch == null) pendingStore.save(destinationKey, batch)
-                when (val upload = destination.upload(batch)) {
-                    is UploadResult.Success -> {
-                        val done = pending.copy(status = HistoryBatchStatus.CONFIRMED, updatedAt = clock.now(zoneId).toInstant())
-                        historyStore.upsert(done)
-                        pendingStore.remove(destinationKey, id)
-                        confirmed += done
-                    }
-                    is UploadResult.Failure -> return if (upload.isRetryable) {
-                        ManualBackfillResult.Retrying(id, upload.message)
-                    } else {
-                        ManualBackfillResult.Failure(upload.message)
-                    }
+            for (window in missingIntervals(day, historyStore.entries(destinationKey))) {
+                when (val result = uploadWindow(window, zoneId)) {
+                    is WindowUploadResult.Confirmed -> confirmed += result.entry
+                    WindowUploadResult.Empty -> emptyDates += date
+                    is WindowUploadResult.Stopped -> return result.result
                 }
             }
         }
-        return if (confirmed.isNotEmpty()) ManualBackfillResult.Success(confirmed)
-        else ManualBackfillResult.NoRecordsFound(emptyDates.distinct())
+        return summarizeBackfill(confirmed, emptyDates)
+    }
+
+    private suspend fun uploadWindow(window: TimeWindow, zoneId: ZoneId): WindowUploadResult {
+        val batchId = stableBackfillBatchId(destinationKey, window)
+        val now = clock.now(zoneId).toInstant()
+        val batch = when (val preparation = prepareBatch(batchId, window, now)) {
+            is BatchPreparation.Ready -> preparation.batch
+            BatchPreparation.Empty -> return WindowUploadResult.Empty
+            is BatchPreparation.Stopped -> return WindowUploadResult.Stopped(preparation.result)
+        }
+        val pending = ExportHistoryEntry(batchId, window, HistoryBatchStatus.PENDING, destinationKey, now)
+        historyStore.upsert(pending)
+        return classifyUpload(destination.upload(batch), pending, zoneId)
+    }
+
+    private suspend fun prepareBatch(batchId: String, window: TimeWindow, now: Instant): BatchPreparation {
+        pendingStore.get(destinationKey, batchId)?.let { return BatchPreparation.Ready(it) }
+        val records = when (val read = readRecords(window)) {
+            is RecordReadResult.Success -> read.records
+            is RecordReadResult.Failure -> return BatchPreparation.Stopped(
+                ManualBackfillResult.Retrying(batchId, read.message),
+            )
+        }
+        if (records.isEmpty()) return BatchPreparation.Empty
+        val batch = buildBatch(batchId, window, now, records)
+        pendingStore.save(destinationKey, batch)
+        return BatchPreparation.Ready(batch)
+    }
+
+    private suspend fun readRecords(window: TimeWindow): RecordReadResult {
+        return try {
+            RecordReadResult.Success(
+                recordReader.readRecords(window).distinctBy {
+                    it.recordType to (it.metadata.clientRecordId ?: it.metadata.recordId)
+                },
+            )
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (e: Exception) {
+            RecordReadResult.Failure("Health Connect read failed: ${e.message ?: "read error"}")
+        }
+    }
+
+    private fun buildBatch(
+        batchId: String,
+        window: TimeWindow,
+        now: Instant,
+        records: List<CanonicalRecord>,
+    ): ExportBatch = ExportBatch(
+        BatchHeader(
+            installationId = exportStateStore.getInstallationId(),
+            batchId = batchId,
+            createdAt = now,
+            timeWindow = window,
+            recordCount = records.size,
+            recordTypes = records.map { it.recordType }.distinct().sorted(),
+        ),
+        records,
+    )
+
+    private fun classifyUpload(
+        upload: UploadResult,
+        pending: ExportHistoryEntry,
+        zoneId: ZoneId,
+    ): WindowUploadResult = when (upload) {
+        is UploadResult.Success -> confirmUpload(pending, zoneId)
+        is UploadResult.Failure -> WindowUploadResult.Stopped(
+            if (upload.isRetryable) ManualBackfillResult.Retrying(pending.batchId, upload.message)
+            else ManualBackfillResult.Failure(upload.message),
+        )
+    }
+
+    private fun confirmUpload(pending: ExportHistoryEntry, zoneId: ZoneId): WindowUploadResult.Confirmed {
+        val confirmed = pending.copy(
+            status = HistoryBatchStatus.CONFIRMED,
+            updatedAt = clock.now(zoneId).toInstant(),
+        )
+        historyStore.upsert(confirmed)
+        pendingStore.remove(destinationKey, pending.batchId)
+        return WindowUploadResult.Confirmed(confirmed)
+    }
+
+    private fun summarizeBackfill(
+        confirmed: List<ExportHistoryEntry>,
+        emptyDates: List<LocalDate>,
+    ): ManualBackfillResult = if (confirmed.isNotEmpty()) {
+        ManualBackfillResult.Success(confirmed)
+    } else {
+        ManualBackfillResult.NoRecordsFound(emptyDates.distinct())
     }
 }
 
