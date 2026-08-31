@@ -35,7 +35,11 @@ class ExportWorker(
         var destinationFactory: ((Context?) -> ExportDestination)? = null
         var stateStoreFactory: ((Context?) -> ExportStateStore)? = null
         var recordReaderFactory: ((HealthConnectClient) -> HealthExportRecordReader)? = null
-        var driveTokenProvider: (suspend (Context?) -> String?)? = null
+        var driveTokenProviderFactory: (Context) -> suspend () -> String? = { context ->
+            val provider = GoogleDriveAccessTokenProvider(context)
+            provider::getAccessToken
+        }
+        var driveTransportFactory: () -> HttpTransport = ::DefaultHttpTransport
         var clock: DiagnosticClock = SystemDiagnosticClock
         var zoneId: ZoneId = ZoneId.systemDefault()
         var idGenerator: IdGenerator = UuidGenerator
@@ -45,7 +49,11 @@ class ExportWorker(
             destinationFactory = null
             stateStoreFactory = null
             recordReaderFactory = null
-            driveTokenProvider = null
+            driveTokenProviderFactory = { context ->
+                val provider = GoogleDriveAccessTokenProvider(context)
+                provider::getAccessToken
+            }
+            driveTransportFactory = ::DefaultHttpTransport
             clock = SystemDiagnosticClock
             zoneId = ZoneId.systemDefault()
             idGenerator = UuidGenerator
@@ -125,7 +133,7 @@ class ExportWorker(
         ): Resolution<ExportDestination> = try {
             val destination = when {
                 destinationFactory != null -> destinationFactory!!(context)
-                context != null -> defaultDestination(context, accountId, driveTokenProvider)
+                context != null -> defaultDestination(context, accountId)
                 else -> error("Context or destinationFactory must be provided")
             }
             Resolution.Success(destination)
@@ -191,13 +199,12 @@ class ExportWorker(
         private fun defaultDestination(
             context: Context,
             accountId: String?,
-            tokenProvider: (suspend (Context?) -> String?)?,
         ): ExportDestination {
+            val tokenProvider = driveTokenProviderFactory(context)
             val gateway = HttpGoogleDriveGateway(
                 accountId = accountId,
-                tokenProvider = {
-                    tokenProvider?.invoke(context)
-                },
+                tokenProvider = tokenProvider,
+                transport = driveTransportFactory(),
             )
             return GoogleDriveDestination(driveGateway = gateway)
         }
