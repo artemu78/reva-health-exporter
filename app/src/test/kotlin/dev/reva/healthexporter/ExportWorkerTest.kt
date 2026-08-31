@@ -75,8 +75,7 @@ class ExportWorkerTest {
     @Test
     fun successfulExportReturnsSuccessPersistsSummaryAndAdvancesCheckpoint() = runBlocking {
         val client = FakeHealthConnectClient()
-        client.setPackageName("com.mi.health")
-        client.insertRecords(createRecords())
+        insertTrustedRecords(client)
 
         ExportWorker.clientFactory = { client }
 
@@ -141,8 +140,7 @@ class ExportWorkerTest {
     @Test
     fun retryableNetworkFailureReturnsRetryPreservesPendingBatchAndDoesNotAdvanceCheckpoint() = runBlocking {
         val client = FakeHealthConnectClient()
-        client.setPackageName("com.mi.health")
-        client.insertRecords(createRecords())
+        insertTrustedRecords(client)
         ExportWorker.clientFactory = { client }
 
         destination.uploadResult = UploadResult.Failure(
@@ -254,6 +252,33 @@ class ExportWorkerTest {
         // and does not launch Activity intents or interactive prompts.
         val result = ExportWorker.execute(context = null)
         assertTrue(result is ListenableWorker.Result.Success)
+    }
+
+    @Test
+    fun scheduledExportUsesTrustedSourcePolicy() = runBlocking {
+        val client = FakeHealthConnectClient()
+        val start = Instant.parse("2026-08-29T13:00:00Z")
+        val end = Instant.parse("2026-08-29T13:15:00Z")
+        client.setPackageName("com.google.android.apps.fitness")
+        client.insertRecords(listOf(StepsRecord(start, null, end, null, 100, Metadata.manualEntry())))
+        client.setPackageName("com.xiaomi.wearable")
+        client.insertRecords(listOf(StepsRecord(start, null, end, null, 200, Metadata.manualEntry())))
+        ExportWorker.clientFactory = { client }
+
+        val result = ExportWorker.execute(context = null)
+
+        assertTrue(result is ListenableWorker.Result.Success)
+        val exported = destination.uploadedBatches.single().records.single() as CanonicalStepsRecord
+        assertEquals(200L, exported.count)
+        assertEquals("com.xiaomi.wearable", exported.metadata.origin)
+    }
+
+    private suspend fun insertTrustedRecords(client: FakeHealthConnectClient) {
+        val records = createRecords()
+        client.setPackageName("com.xiaomi.wearable")
+        client.insertRecords(records.filter { it is StepsRecord || it is HeartRateRecord || it is SleepSessionRecord })
+        client.setPackageName("com.google.android.apps.fitness")
+        client.insertRecords(records.filter { it is DistanceRecord || it is TotalCaloriesBurnedRecord })
     }
 
     private fun createRecords(): List<Record> {
