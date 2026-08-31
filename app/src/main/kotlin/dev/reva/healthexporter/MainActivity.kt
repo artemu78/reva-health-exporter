@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RadioGroup
@@ -20,6 +21,8 @@ import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
 
 class MainActivity : ComponentActivity() {
     companion object {
@@ -61,6 +64,9 @@ class MainActivity : ComponentActivity() {
     private var backgroundSummary: BackgroundReadSummary? = null
     private val probeStore by lazy { SharedPreferencesBackgroundProbeStore(this) }
     private val exportStateStore by lazy { SharedPreferencesExportStateStore(this) }
+    private val exportHistoryStore by lazy { SharedPreferencesExportHistoryStore(this) }
+    private val exportHistoryPresenter by lazy { ExportHistoryPresenter(ZoneId.systemDefault()) }
+    private var historyDestinationKey: String? = null
     private var lastValidDiagnosticState: DiagnosticScreenState? = null
     private var lastDiagnosticResult: DiagnosticProbeResult? = null
     private val diagnosticPresenter by lazy {
@@ -119,6 +125,9 @@ class MainActivity : ComponentActivity() {
         findViewById<Button>(R.id.drive_export_now).setOnClickListener {
             triggerDriveExport()
         }
+        findViewById<Button>(R.id.export_history_refresh).setOnClickListener { refreshExportHistory() }
+        findViewById<Button>(R.id.export_history_upload_selected).setOnClickListener { confirmBackfill() }
+        showInitialExportHistory(inventoryKnown = false)
         renderDriveAuthorization(driveAuthorizationCoordinator.state)
         findViewById<Button>(R.id.diagnostic_export).setOnClickListener {
             if (lastDiagnosticResult != null) {
@@ -147,13 +156,117 @@ class MainActivity : ComponentActivity() {
         findViewById<Button>(R.id.drive_disconnect).visibility = if (connected) View.VISIBLE else View.GONE
         val isDriveConnected = state is DriveAuthorizationState.Connected
         findViewById<Button>(R.id.drive_export_now).visibility = if (isDriveConnected) View.VISIBLE else View.GONE
+        findViewById<Button>(R.id.export_history_refresh).isEnabled = isDriveConnected
 
         if (state is DriveAuthorizationState.Connected) {
             ExportScheduler.schedulePeriodicExport(this, accountId = state.accountId)
+            historyDestinationKey = destinationHistoryKey(state.accountId, GoogleDriveDestination.DEFAULT_ROOT_FOLDER_NAME)
+            refreshExportHistory()
         } else if (state == DriveAuthorizationState.Disconnected) {
             ExportScheduler.cancelPeriodicExport(this)
+            historyDestinationKey = null
+            showInitialExportHistory(inventoryKnown = false)
         }
         renderExportStatus()
+    }
+
+    private fun recentHistoryDates(): List<LocalDate> = (0L until 14L).map { LocalDate.now().minusDays(it) }
+
+    private fun showInitialExportHistory(inventoryKnown: Boolean) {
+        val key = historyDestinationKey
+        exportHistoryPresenter.show(
+            recentHistoryDates(),
+            if (key == null) emptyList() else exportHistoryStore.entries(key),
+            inventoryKnown,
+        )
+        renderExportHistory()
+    }
+
+    private fun refreshExportHistory() {
+        val auth = driveAuthorizationCoordinator.state as? DriveAuthorizationState.Connected
+        val key = historyDestinationKey
+        if (auth == null || key == null) {
+            showInitialExportHistory(inventoryKnown = false)
+            return
+        }
+        findViewById<TextView>(R.id.export_history_status).text = getString(R.string.export_history_refreshing)
+        lifecycleScope.launch {
+            val gateway = googleDriveGatewayFactory(this@MainActivity, auth.accountId)
+            val result = DriveHistoryInventoryRefresher(
+                gateway, exportHistoryStore, exportStateStore.getInstallationId(), key,
+            ).refresh()
+            showInitialExportHistory(inventoryKnown = result is HistoryRefreshResult.Success)
+            findViewById<TextView>(R.id.export_history_status).text =
+                if (result is HistoryRefreshResult.Unknown) result.reason else ""
+        }
+    }
+
+    private fun renderExportHistory() {
+        val state = exportHistoryPresenter.state
+        findViewById<TextView>(R.id.export_history_timezone).text =
+            getString(R.string.export_history_timezone, state.zoneId.id)
+        findViewById<LinearLayout>(R.id.export_history_rows).apply {
+            removeAllViews()
+            state.rows.forEach { row ->
+                addView(CheckBox(this@MainActivity).apply {
+                    text = "${row.date} — ${coverageLabel(row.coverage)}"
+                    isChecked = row.selected
+                    isEnabled = row.coverage != DayCoverage.UPLOADED && row.coverage != DayCoverage.UNKNOWN
+                    contentDescription = text
+                    setOnClickListener {
+                        exportHistoryPresenter.toggle(row.date)
+                        renderExportHistory()
+                    }
+                })
+            }
+        }
+        findViewById<Button>(R.id.export_history_upload_selected).isEnabled = state.canUpload
+    }
+
+    private fun coverageLabel(coverage: DayCoverage): String = getString(when (coverage) {
+        DayCoverage.UPLOADED -> R.string.export_history_uploaded
+        DayCoverage.PARTIALLY_UPLOADED -> R.string.export_history_partial
+        DayCoverage.NOT_UPLOADED -> R.string.export_history_missing
+        DayCoverage.PENDING_RETRYING -> R.string.export_history_pending
+        DayCoverage.UNKNOWN -> R.string.export_history_unknown
+    })
+
+    private fun confirmBackfill() {
+        val confirmation = exportHistoryPresenter.requestConfirmation()
+        android.app.AlertDialog.Builder(this)
+            .setTitle(R.string.export_history_confirm_title)
+            .setMessage(getString(R.string.export_history_confirm_message, confirmation.rangeLabel))
+            .setNegativeButton(R.string.export_history_cancel, null)
+            .setPositiveButton(R.string.export_history_confirm) { _, _ -> runBackfill() }
+            .show()
+    }
+
+    private fun runBackfill() {
+        val dates = exportHistoryPresenter.confirmUpload()
+        val auth = driveAuthorizationCoordinator.state as? DriveAuthorizationState.Connected ?: return
+        val client = healthConnectClient ?: run {
+            findViewById<TextView>(R.id.export_history_status).text = getString(R.string.drive_export_health_connect_not_ready)
+            return
+        }
+        val key = historyDestinationKey ?: return
+        findViewById<TextView>(R.id.export_history_status).text = getString(R.string.export_history_uploading)
+        lifecycleScope.launch {
+            val result = ManualBackfillCoordinator(
+                exportStateStore,
+                exportHistoryStore,
+                HealthConnectExportReader(client),
+                GoogleDriveDestination(googleDriveGatewayFactory(this@MainActivity, auth.accountId)),
+                key,
+                pendingStore = SharedPreferencesManualBackfillPendingStore(this@MainActivity),
+            ).uploadDays(dates, ZoneId.systemDefault())
+            findViewById<TextView>(R.id.export_history_status).text = when (result) {
+                is ManualBackfillResult.Success -> getString(R.string.drive_export_status_success, result.confirmed.last().batchId, result.confirmed.size)
+                is ManualBackfillResult.NoRecordsFound -> getString(R.string.export_history_no_records)
+                is ManualBackfillResult.Retrying -> result.message
+                is ManualBackfillResult.Failure -> result.message
+            }
+            refreshExportHistory()
+        }
     }
 
     private fun triggerDriveExport() {

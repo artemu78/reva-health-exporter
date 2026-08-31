@@ -111,6 +111,50 @@
             android:layout_marginTop="8dp"
             android:accessibilityLiveRegion="polite" />
 
+        <TextView
+            android:id="@+id/export_history_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:accessibilityHeading="true"
+            android:text="@string/export_history_title"
+            android:textAppearance="@android:style/TextAppearance.Material.Title" />
+
+        <TextView
+            android:id="@+id/export_history_timezone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+
+        <Button
+            android:id="@+id/export_history_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/export_history_refresh" />
+
+        <LinearLayout
+            android:id="@+id/export_history_rows"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical" />
+
+        <Button
+            android:id="@+id/export_history_upload_selected"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:enabled="false"
+            android:text="@string/export_history_upload_selected" />
+
+        <TextView
+            android:id="@+id/export_history_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:accessibilityLiveRegion="polite" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
