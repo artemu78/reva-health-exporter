@@ -13,13 +13,29 @@ class HttpGoogleDriveGatewayTest {
     private class FakeHttpTransport : HttpTransport {
         val executedRequests = mutableListOf<HttpRequest>()
         var responseToReturn: HttpResponse = HttpResponse(statusCode = 200, body = "{}".toByteArray())
+        val queuedResponses = ArrayDeque<HttpResponse>()
         var exceptionToThrow: Throwable? = null
 
         override suspend fun execute(request: HttpRequest): HttpResponse {
             executedRequests.add(request)
             exceptionToThrow?.let { throw it }
-            return responseToReturn
+            return if (queuedResponses.isNotEmpty()) queuedResponses.removeFirst() else responseToReturn
         }
+    }
+
+    @Test
+    fun `findFiles follows nextPageToken so history inventory is complete`() = runBlocking {
+        val transport = FakeHttpTransport().apply {
+            queuedResponses += HttpResponse(200, body = """{"nextPageToken":"page-2","files":[{"id":"one"}]}""".toByteArray())
+            queuedResponses += HttpResponse(200, body = """{"files":[{"id":"two"}]}""".toByteArray())
+        }
+        val gateway = HttpGoogleDriveGateway(tokenProvider = { "token" }, transport = transport)
+
+        val files = gateway.findFiles(appProperties = mapOf("installationId" to "synthetic"))
+
+        assertEquals(listOf("one", "two"), files.map { it.id })
+        assertEquals(2, transport.executedRequests.size)
+        assertTrue(transport.executedRequests[1].url.contains("pageToken=page-2"))
     }
 
     @Test

@@ -168,6 +168,10 @@ class GoogleDriveDestination(
                 "batchId" to batch.header.batchId,
                 "installationId" to batch.header.installationId,
                 "schemaVersion" to batch.header.schemaVersion.toString(),
+                "windowStart" to batch.header.timeWindow.startInclusive.toString(),
+                "windowEnd" to batch.header.timeWindow.endExclusive.toString(),
+                "historyStatus" to HistoryBatchStatus.CONFIRMED.name,
+                "historyUpdatedAt" to batch.header.createdAt.toString(),
             )
 
             val uploadedFile = driveGateway.uploadFile(
@@ -406,19 +410,26 @@ class HttpGoogleDriveGateway(
     }
 
     private suspend fun queryFiles(query: String): List<GoogleDriveFile> {
-        val token = getValidToken()
         val encodedQuery = URLEncoder.encode(query, "UTF-8")
-        val request = HttpRequest(
-            method = "GET",
-            url = "$baseUrl/files?q=$encodedQuery&spaces=drive&fields=files(id,name,mimeType,parents,appProperties,createdTime)&pageSize=100",
-            headers = mapOf("Authorization" to "Bearer $token"),
-        )
-        val response = transport.execute(request)
-        handlePotentialError(response)
-
-        val json = JsonParser.parseString(response.bodyAsString).asJsonObject
-        val filesArray = json.getAsJsonArray("files") ?: return emptyList()
-        return filesArray.map { parseDriveFile(it.asJsonObject) }
+        val files = mutableListOf<GoogleDriveFile>()
+        val seenTokens = mutableSetOf<String>()
+        var pageToken: String? = null
+        do {
+            val token = getValidToken()
+            val pageSuffix = pageToken?.let { "&pageToken=${URLEncoder.encode(it, "UTF-8")}" }.orEmpty()
+            val request = HttpRequest(
+                method = "GET",
+                url = "$baseUrl/files?q=$encodedQuery&spaces=drive&fields=nextPageToken,files(id,name,mimeType,parents,appProperties,createdTime)&pageSize=100$pageSuffix",
+                headers = mapOf("Authorization" to "Bearer $token"),
+            )
+            val response = transport.execute(request)
+            handlePotentialError(response)
+            val json = JsonParser.parseString(response.bodyAsString).asJsonObject
+            json.getAsJsonArray("files")?.forEach { files += parseDriveFile(it.asJsonObject) }
+            pageToken = json.get("nextPageToken")?.asString?.takeIf { it.isNotBlank() }
+            if (pageToken != null && !seenTokens.add(pageToken)) pageToken = null
+        } while (pageToken != null)
+        return files
     }
 
     private suspend fun getValidToken(): String {

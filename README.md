@@ -62,6 +62,22 @@ or their folder in Drive, then empty Drive trash if permanent remote deletion is
 on-device checkpoints, pending batches, authorization state, and the pseudonymous installation ID,
 clear the app's storage or uninstall it. Keep any exported copies you still need before clearing data.
 
+## Export history and manual backfill
+
+The **Export history** section shows the latest 14 local calendar days using the phone's current
+timezone. **Uploaded** means confirmed app-created Google Drive batch intervals cover the whole
+day; **Partially uploaded** means only part is covered; **Not uploaded** means a successful Drive
+refresh found no coverage; and **Pending / retrying** means a stable local batch still needs durable
+confirmation. **Unknown** is deliberately different from missing: it appears while Drive is
+disconnected, authorization has been revoked, refresh failed, or app-created metadata is incomplete.
+
+Select one or more days that are not fully uploaded, tap **Upload selected days**, and confirm the
+displayed range. The app reads only the missing local-day interval(s), uses the normal immutable and
+duplicate-safe Drive batch flow, and leaves the incremental export checkpoint unchanged. **No
+records found** describes Health Connect source availability for that interval; it does not mean a
+Drive batch was uploaded. Drive coverage likewise proves only that an export interval was confirmed,
+not that Mi Fitness supplied every expected measurement.
+
 ## Build and test
 
 Use JDK 17 and an Android SDK containing platform 36. The Gradle wrapper downloads the supported Gradle version, so a separate Gradle installation is not required.
