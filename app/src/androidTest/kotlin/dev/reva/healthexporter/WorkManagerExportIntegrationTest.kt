@@ -195,6 +195,33 @@ class WorkManagerExportIntegrationTest {
     }
 
     @Test
+    fun production_worker_destination_uses_background_drive_authorization_token() = runBlocking {
+        ExportWorker.destinationFactory = null
+        ExportWorker.driveTokenProviderFactory = { { "synthetic-drive-token" } }
+        val requests = mutableListOf<HttpRequest>()
+        ExportWorker.driveTransportFactory = {
+            HttpTransport { request ->
+                requests += request
+                HttpResponse(statusCode = 200, body = "{\"files\":[]}".toByteArray())
+            }
+        }
+        stateStore.saveCheckpoint(
+            ExportCheckpoint(
+                lastWindowEnd = testInstant,
+                lastBatchId = "previous-batch",
+                exportedAt = testInstant.minusSeconds(60),
+                totalRecordCount = 5,
+            ),
+        )
+
+        val result = ExportWorker.execute(context)
+
+        assertTrue(result is ListenableWorker.Result.Success)
+        assertTrue(requests.isNotEmpty())
+        assertEquals("Bearer synthetic-drive-token", requests.first().headers["Authorization"])
+    }
+
+    @Test
     fun concurrency_periodic_work_and_export_now_run_safely_without_corruption() = runBlocking {
         // Run concurrent executions of ExportWorker.execute
         val results = coroutineScope {

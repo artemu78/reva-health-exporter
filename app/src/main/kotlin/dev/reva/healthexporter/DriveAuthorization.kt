@@ -7,6 +7,21 @@ object DriveAuthorizationScopes {
     fun isNarrow(scopes: Set<String>): Boolean = scopes == requested
 }
 
+internal sealed interface DriveAuthorizationNextStep {
+    data object LaunchResolution : DriveAuthorizationNextStep
+    data object Authorized : DriveAuthorizationNextStep
+    data object Denied : DriveAuthorizationNextStep
+}
+
+internal fun decideDriveAuthorizationNextStep(
+    hasResolution: Boolean,
+    grantedScopes: Set<String>,
+): DriveAuthorizationNextStep = when {
+    hasResolution -> DriveAuthorizationNextStep.LaunchResolution
+    DriveAuthorizationScopes.isNarrow(grantedScopes) -> DriveAuthorizationNextStep.Authorized
+    else -> DriveAuthorizationNextStep.Denied
+}
+
 sealed interface DriveAuthorizationState {
     data object Disconnected : DriveAuthorizationState
     data object Connecting : DriveAuthorizationState

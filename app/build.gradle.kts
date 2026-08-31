@@ -2,6 +2,7 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlinx.kover") version "0.9.9"
 }
 
 val versionProperties = Properties().apply {
@@ -80,5 +81,33 @@ dependencies {
     androidTestImplementation("androidx.health.connect:connect-testing:1.0.0-alpha03") {
         exclude(group = "androidx.health.connect", module = "connect-client")
         exclude(group = "androidx.health.connect", module = "connect-client-proto")
+    }
+}
+
+kover {
+    reports {
+        variant("debug") {
+            filters {
+                includes {
+                    classes(
+                        "dev.reva.healthexporter.ExportCoordinator*",
+                    )
+                }
+            }
+            verify {
+                rule("pure Kotlin core line coverage") {
+                    bound {
+                        minValue = 90
+                        coverageUnits = kotlinx.kover.gradle.plugin.dsl.CoverageUnit.LINE
+                    }
+                }
+                rule("pure Kotlin core branch coverage") {
+                    bound {
+                        minValue = 85
+                        coverageUnits = kotlinx.kover.gradle.plugin.dsl.CoverageUnit.BRANCH
+                    }
+                }
+            }
+        }
     }
 }

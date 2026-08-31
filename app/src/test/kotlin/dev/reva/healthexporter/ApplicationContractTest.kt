@@ -5,6 +5,7 @@ import java.nio.file.Path
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.io.path.readText
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -66,6 +67,77 @@ class ApplicationContractTest {
     }
 
     @Test
+    fun `release acceptance has one executable repository interface`() {
+        val acceptanceScript = projectDirectory.resolve("../scripts/verify-release-acceptance.sh").normalize()
+        val acceptanceGuide = projectDirectory.resolve("../docs/issue-13-release-acceptance.md").normalize()
+
+        assertTrue("release acceptance script must exist", Files.isRegularFile(acceptanceScript))
+        assertTrue("release acceptance script must be executable", Files.isExecutable(acceptanceScript))
+        assertTrue("release acceptance guide must exist", Files.isRegularFile(acceptanceGuide))
+
+        val script = acceptanceScript.readText()
+        assertTrue(script.contains("./gradlew test lintDebug assembleDebug"))
+        assertTrue(script.contains("./scripts/verify-release-build.sh"))
+        assertTrue(script.contains("verify-schema-v1-fixtures"))
+        assertTrue(script.contains("verify-repository-privacy"))
+        assertTrue(script.contains("git grep -nI -E -e"))
+        assertFalse(script.contains(":!scripts/verify-release-acceptance.sh"))
+
+        val guide = acceptanceGuide.readText()
+        assertTrue(guide.contains("Clean install"))
+        assertTrue(guide.contains("Upgrade"))
+        assertTrue(guide.contains("Permission revocation"))
+        assertTrue(guide.contains("Drive revocation"))
+        assertTrue(guide.contains("Offline recovery"))
+        assertTrue(guide.contains("Account switch"))
+        assertTrue(guide.contains("Corrupt local state"))
+    }
+
+    @Test
+    fun `release acceptance enforces core line and branch coverage`() {
+        val build = projectDirectory.resolve("build.gradle.kts")
+        val workflow = projectDirectory.resolve("../.github/workflows/android.yml").normalize()
+        val acceptanceScript = projectDirectory.resolve("../scripts/verify-release-acceptance.sh").normalize()
+
+        val buildConfiguration = build.readText()
+        assertTrue(buildConfiguration.contains("CoverageUnit.LINE"))
+        assertTrue(buildConfiguration.contains("minValue = 90"))
+        assertTrue(buildConfiguration.contains("CoverageUnit.BRANCH"))
+        assertTrue(buildConfiguration.contains("minValue = 85"))
+        assertTrue(workflow.readText().contains("koverVerifyDebug"))
+        assertTrue(acceptanceScript.readText().contains("koverVerifyDebug"))
+    }
+
+    @Test
+    fun `only permanently signed workflow artifacts are presented as installable candidates`() {
+        val ciWorkflow = projectDirectory.resolve("../.github/workflows/android.yml").normalize().readText()
+        val releaseVerifier = projectDirectory.resolve("../scripts/verify-release-build.sh").normalize().readText()
+
+        assertTrue(ciWorkflow.contains("name: debug-fast-check-results"))
+        assertTrue(ciWorkflow.contains("workflow_dispatch:"))
+        assertTrue(ciWorkflow.contains("name: signed-release-candidate-"))
+        assertTrue(ciWorkflow.contains("ANDROID_KEYSTORE_BASE64"))
+        assertTrue(ciWorkflow.contains("github.event.pull_request.head.repo.full_name == github.repository"))
+        assertTrue(releaseVerifier.contains("rm -f \"\$apk_path\""))
+    }
+
+    @Test
+    fun `API 30 gate launches the minified release build`() {
+        val workflow = projectDirectory.resolve("../.github/workflows/android.yml").normalize().readText()
+        val launchVerifier = projectDirectory.resolve("../scripts/verify-minified-launch.sh").normalize()
+
+        assertTrue("minified launch verifier must exist", Files.isRegularFile(launchVerifier))
+        assertTrue("minified launch verifier must be executable", Files.isExecutable(launchVerifier))
+        assertTrue(workflow.contains("./scripts/verify-minified-launch.sh"))
+
+        val script = launchVerifier.readText()
+        assertTrue(script.contains("assembleRelease"))
+        assertTrue(script.contains("install -r \"\$apk_path\""))
+        assertTrue(script.contains("dev.reva.healthexporter/.MainActivity"))
+        assertTrue(script.contains("pidof dev.reva.healthexporter"))
+    }
+
+    @Test
     fun `manifest exposes Health Connect and declares only selected read permissions`() {
         val manifest = projectDirectory.resolve("src/main/AndroidManifest.xml")
         val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(manifest.toFile())
@@ -76,6 +148,7 @@ class ApplicationContractTest {
 
         assertEquals(
             setOf(
+                "android.permission.INTERNET",
                 "android.permission.health.READ_STEPS",
                 "android.permission.health.READ_HEART_RATE",
                 "android.permission.health.READ_RESTING_HEART_RATE",
@@ -95,6 +168,18 @@ class ApplicationContractTest {
             "com.google.android.apps.healthdata",
             packages.item(0).attributes.getNamedItem("android:name").nodeValue,
         )
+    }
+
+    @Test
+    fun `Google Drive export declares install-time internet access`() {
+        val manifest = projectDirectory.resolve("src/main/AndroidManifest.xml")
+        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(manifest.toFile())
+        val permissionNodes = document.getElementsByTagName("uses-permission")
+        val permissions = (0 until permissionNodes.length)
+            .map { permissionNodes.item(it).attributes.getNamedItem("android:name").nodeValue }
+            .toSet()
+
+        assertTrue("Google Drive export requires INTERNET permission", "android.permission.INTERNET" in permissions)
     }
 
     @Test

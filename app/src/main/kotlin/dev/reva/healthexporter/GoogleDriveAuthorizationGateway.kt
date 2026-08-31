@@ -84,24 +84,26 @@ class GoogleDriveAuthorizationGateway(
 
     private fun handleResult(result: AuthorizationResult) {
         val granted = result.grantedScopes.toSet()
-        if (!DriveAuthorizationScopes.isNarrow(granted)) {
-            currentAccessToken = null
-            onComplete(DriveAuthorizationResult.Denied)
-            return
-        }
-        if (result.hasResolution()) {
-            val pendingIntent = result.pendingIntent ?: run {
+        when (decideDriveAuthorizationNextStep(result.hasResolution(), granted)) {
+            DriveAuthorizationNextStep.LaunchResolution -> {
+                val pendingIntent = result.pendingIntent ?: run {
+                    currentAccessToken = null
+                    onComplete(DriveAuthorizationResult.Denied)
+                    return
+                }
+                resolutionLauncher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
+            }
+            DriveAuthorizationNextStep.Denied -> {
                 currentAccessToken = null
                 onComplete(DriveAuthorizationResult.Denied)
-                return
             }
-            resolutionLauncher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
-            return
+            DriveAuthorizationNextStep.Authorized -> {
+                currentAccessToken = result.accessToken
+                val account = result.toGoogleSignInAccount()
+                val accountIdentity = account?.id ?: account?.account?.name
+                onComplete(DriveAuthorizationResult.Authorized(accountIdentity?.let(::hashAccountIdentity)))
+            }
         }
-        currentAccessToken = result.accessToken
-        val account = result.toGoogleSignInAccount()
-        val accountIdentity = account?.id ?: account?.account?.name
-        onComplete(DriveAuthorizationResult.Authorized(accountIdentity?.let(::hashAccountIdentity)))
     }
 
     private fun classifyFailure(error: Exception): DriveAuthorizationResult {
