@@ -12,7 +12,10 @@ The app does not connect to the band directly. It reads only records that Mi Fit
 
 ## Why diagnostic first?
 
-Mi Fitness may expose only part of the band's data through Health Connect. The first version will therefore identify available record types, sources, history, and granularity on the target phone. Background upload will be built only after the required data is confirmed.
+Mi Fitness may expose only part of the band's data through Health Connect. The app therefore keeps
+diagnostics for identifying available record types, sources, history, and granularity on the target
+phone. Local and Google Drive export plus WorkManager scheduling are implemented, but they can
+export only the records that Health Connect actually makes available.
 
 ## Intended export flow
 
