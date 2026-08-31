@@ -48,16 +48,19 @@ verify-repository-privacy() {
     echo "Repository privacy scan passed (tracked files only)."
 }
 
-echo "[1/4] Fast automated suite"
+echo "[1/5] Release-to-device command contract"
+./scripts/test-release-to-device.sh
+
+echo "[2/5] Fast automated suite"
 ./gradlew test lintDebug assembleDebug koverVerifyDebug
 
-echo "[2/4] Schema version 1 fixtures"
+echo "[3/5] Schema version 1 fixtures"
 verify-schema-v1-fixtures
 
-echo "[3/4] Repository privacy scan"
+echo "[4/5] Repository privacy scan"
 verify-repository-privacy
 
-echo "[4/4] Signed, minified release contract"
+echo "[5/5] Signed, minified release contract"
 ./scripts/verify-release-build.sh
 
 echo "Automated release acceptance passed."

@@ -126,6 +126,34 @@ git push origin v0.1.0
 
 The tag starts the Android Release workflow. It restores the private signing keystore from GitHub Actions secrets, runs tests and release lint, builds a signed and minified APK, verifies its signature, and attaches it directly to the matching GitHub Release.
 
+### Release and install over Wi-Fi
+
+After the intended pull request is merged, update local `main` so it exactly matches `origin/main`.
+The release command uses the version already present in `version.properties`; it does not create a
+version commit. Configure the phone once in the ignored `local-device.properties` file:
+
+```properties
+ADB_TARGET=192.0.2.10:5555
+```
+
+Replace the documentation-only address with the phone's Wi-Fi address and ADB port. For the usual
+TCP/IP setup, enable Developer options and USB debugging on the phone, connect it once by USB, run
+`adb tcpip 5555`, note the phone's Wi-Fi IP address, disconnect USB, and keep the Mac and phone on
+the same trusted network. The release command itself never falls back to a USB device; it runs
+`adb connect` for the configured Wi-Fi target.
+
+Then run:
+
+```sh
+./scripts/release-to-device.sh
+```
+
+The command checks clean synchronized `main`, creates or safely resumes the matching tag, waits for
+the exact GitHub release workflow, downloads the permanently signed APK under `build/releases/`,
+connects to the configured phone, installs the update, verifies its version, and launches the app.
+If Android rejects the update, the command explains that a clean reinstall erases local app state.
+It uninstalls only if you type the exact lowercase word `reinstall`; any other response cancels.
+
 The required repository secrets are `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Keep an offline encrypted backup of the original keystore and its passwords; GitHub does not let you recover secret values later. Never commit a keystore or credentials.
 
 The first release-signed APK cannot update a currently installed debug-signed APK. Uninstall the debug build once, accepting loss of this app's local state, and install the release APK. Later releases signed by the same key can update it normally.
