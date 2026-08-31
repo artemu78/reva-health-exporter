@@ -85,7 +85,7 @@ class LocalFileDestination(
 
         return try {
             FileOutputStream(tempFile).use { outputStream ->
-                serializer.serializeToGzip(batch, outputStream)
+                outputStream.write(serializer.serializeToJson(batch).toByteArray(Charsets.UTF_8))
             }
 
             try {
@@ -131,7 +131,7 @@ class LocalFileDestination(
         fun formatBatchFilename(header: BatchHeader): String {
             val startStr = TIMESTAMP_FORMATTER.format(header.timeWindow.startInclusive)
             val endStr = TIMESTAMP_FORMATTER.format(header.timeWindow.endExclusive)
-            return "$startStr--$endStr--${header.batchId}.ndjson.gz"
+            return "$startStr--$endStr--${header.batchId}.json"
         }
     }
 }

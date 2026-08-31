@@ -72,7 +72,7 @@ class LocalFileDestinationTest {
     }
 
     @Test
-    fun uploadWritesValidGzipNdjsonBatch() = runBlocking {
+    fun uploadWritesValidJsonBatch() = runBlocking {
         val dir = tempFolder.newFolder("exports")
         val destination = LocalFileDestination(baseDirectory = dir, useHierarchy = true)
         val batch = createSampleBatch()
@@ -86,15 +86,15 @@ class LocalFileDestinationTest {
         val writtenFile = File(success.location!!)
         assertTrue("Written file should exist", writtenFile.exists())
         assertTrue("Filename should contain batchId", writtenFile.name.contains("test-batch-001"))
-        assertTrue("Filename should end with .ndjson.gz", writtenFile.name.endsWith(".ndjson.gz"))
+        assertTrue("Filename should end with .json", writtenFile.name.endsWith(".json"))
 
         // Check directory hierarchy 2026/08
         val parentDir = writtenFile.parentFile
         assertEquals("08", parentDir?.name)
         assertEquals("2026", parentDir?.parentFile?.name)
 
-        // Decompress and parse the written file to ensure schema validity
-        val parsedBatch = serializer.decompressAndParse(writtenFile.readBytes())
+        // Parse the written JSON file directly to ensure schema validity
+        val parsedBatch = serializer.parseJson(writtenFile.readText(Charsets.UTF_8))
         assertEquals(batch.header.batchId, parsedBatch.header.batchId)
         assertEquals(batch.header.recordCount, parsedBatch.header.recordCount)
         assertEquals(1, parsedBatch.records.size)
@@ -137,7 +137,7 @@ class LocalFileDestinationTest {
     fun atomicWriteCleansUpTemporaryFileOnFailure() = runBlocking {
         val dir = tempFolder.newFolder("exports")
         val failingSerializer = object : ExportBatchSerializer() {
-            override fun serializeToGzip(batch: ExportBatch, outputStream: java.io.OutputStream) {
+            override fun serializeToJson(batch: ExportBatch): String {
                 throw IOException("Simulated disk error during serialization")
             }
         }
@@ -183,6 +183,6 @@ class LocalFileDestinationTest {
         )
 
         val filename = LocalFileDestination.formatBatchFilename(header)
-        assertEquals("2026-08-29T000000Z--2026-08-30T000000Z--batch-123.ndjson.gz", filename)
+        assertEquals("2026-08-29T000000Z--2026-08-30T000000Z--batch-123.json", filename)
     }
 }

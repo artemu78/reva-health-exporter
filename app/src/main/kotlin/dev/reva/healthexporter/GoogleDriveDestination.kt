@@ -162,7 +162,7 @@ class GoogleDriveDestination(
                 )
             }
 
-            val gzipBytes = serializer.serializeToGzipBytes(batch)
+            val jsonBytes = serializer.serializeToJson(batch).toByteArray(Charsets.UTF_8)
 
             val appProperties = mapOf(
                 "batchId" to batch.header.batchId,
@@ -172,10 +172,10 @@ class GoogleDriveDestination(
 
             val uploadedFile = driveGateway.uploadFile(
                 name = filename,
-                mimeType = "application/gzip",
+                mimeType = "application/json",
                 parentFolderId = targetFolderId,
                 appProperties = appProperties,
-                content = gzipBytes,
+                content = jsonBytes,
             )
 
             UploadResult.Success(

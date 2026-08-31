@@ -153,7 +153,7 @@ class HealthRecordMapperTest {
         assertEquals("client-step-zero", canonical.metadata.clientRecordId)
         assertEquals(0L, canonical.metadata.clientRecordVersion)
 
-        // Verify serializer preserves "clientRecordVersion": 0
+        // Verify serializer strips "clientRecordVersion" and "clientRecordId" from exported JSON
         val serializer = ExportBatchSerializer()
         val batch = ExportBatch(
             header = BatchHeader(
@@ -167,11 +167,9 @@ class HealthRecordMapperTest {
             ),
             records = listOf(canonical),
         )
-        val json = serializer.serializeToNdjson(batch)
-        assertEquals(true, json.contains("\"clientRecordVersion\":0"))
-
-        val parsed = serializer.parseNdjson(json)
-        assertEquals(0L, parsed.records.first().metadata.clientRecordVersion)
+        val json = serializer.serializeToJson(batch)
+        assertEquals(false, json.contains("\"clientRecordVersion\""))
+        assertEquals(false, json.contains("\"clientRecordId\""))
     }
 
     @Test

@@ -219,28 +219,41 @@ class SharedPreferencesExportStateStore(
     }
 
     override fun getPendingBatch(): ExportBatch? {
-        val ndjson = preferences.getString(KEY_PENDING_BATCH_NDJSON, null) ?: return null
+        val serialized = preferences.getString(KEY_PENDING_BATCH_JSON, null)
+            ?: preferences.getString(KEY_PENDING_BATCH_NDJSON, null)
+            ?: return null
         return try {
-            serializer.parseNdjson(ndjson)
+            if (serialized.trimStart().startsWith("{") && serialized.contains("\"header\"") && serialized.contains("\"records\"")) {
+                serializer.parseJson(serialized)
+            } else {
+                try {
+                    serializer.parseJson(serialized)
+                } catch (_: Exception) {
+                    serializer.parseNdjson(serialized)
+                }
+            }
         } catch (_: Exception) {
             // Quarantine corrupt pending batch entry safely
             preferences.edit()
+                .remove(KEY_PENDING_BATCH_JSON)
                 .remove(KEY_PENDING_BATCH_NDJSON)
-                .putString(KEY_CORRUPT_PENDING_BATCH_BACKUP, ndjson)
+                .putString(KEY_CORRUPT_PENDING_BATCH_BACKUP, serialized)
                 .commit()
             null
         }
     }
 
     override fun savePendingBatch(batch: ExportBatch) {
-        val ndjson = serializer.serializeToNdjson(batch)
+        val json = serializer.serializeToJson(batch)
         preferences.edit()
-            .putString(KEY_PENDING_BATCH_NDJSON, ndjson)
+            .putString(KEY_PENDING_BATCH_JSON, json)
+            .remove(KEY_PENDING_BATCH_NDJSON)
             .commit()
     }
 
     override fun clearPendingBatch() {
         preferences.edit()
+            .remove(KEY_PENDING_BATCH_JSON)
             .remove(KEY_PENDING_BATCH_NDJSON)
             .commit()
     }
@@ -267,6 +280,7 @@ class SharedPreferencesExportStateStore(
     override fun clear() {
         preferences.edit()
             .remove(KEY_LAST_CHECKPOINT_JSON)
+            .remove(KEY_PENDING_BATCH_JSON)
             .remove(KEY_PENDING_BATCH_NDJSON)
             .remove(KEY_LAST_EXECUTION_SUMMARY_JSON)
             .commit()
@@ -276,6 +290,7 @@ class SharedPreferencesExportStateStore(
         const val PREFERENCES_NAME = "reva_health_export_state"
         const val KEY_INSTALLATION_ID = "installation_id"
         const val KEY_LAST_CHECKPOINT_JSON = "last_export_checkpoint_json"
+        const val KEY_PENDING_BATCH_JSON = "pending_export_batch_json"
         const val KEY_PENDING_BATCH_NDJSON = "pending_export_batch_ndjson"
         const val KEY_LAST_EXECUTION_SUMMARY_JSON = "last_export_execution_summary_json"
         const val KEY_CORRUPT_CHECKPOINT_BACKUP = "corrupt_last_checkpoint_backup"

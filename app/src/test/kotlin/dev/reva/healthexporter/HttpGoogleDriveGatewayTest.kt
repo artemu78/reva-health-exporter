@@ -134,8 +134,8 @@ class HttpGoogleDriveGatewayTest {
         val jsonResponse = """
             {
               "id": "file-uploaded-456",
-              "name": "test-batch.ndjson.gz",
-              "mimeType": "application/gzip",
+              "name": "test-batch.json",
+              "mimeType": "application/json",
               "parents": ["month-folder-id"],
               "appProperties": {
                 "batchId": "batch-111",
@@ -151,23 +151,24 @@ class HttpGoogleDriveGatewayTest {
             transport = transport,
         )
 
-        val content = "fake-gzip-binary-data".toByteArray(Charsets.UTF_8)
+        val content = "{\"header\":{},\"records\":[]}".toByteArray(Charsets.UTF_8)
         val uploaded = gateway.uploadFile(
-            name = "test-batch.ndjson.gz",
-            mimeType = "application/gzip",
+            name = "test-batch.json",
+            mimeType = "application/json",
             parentFolderId = "month-folder-id",
             appProperties = mapOf("batchId" to "batch-111", "schemaVersion" to "1"),
             content = content,
         )
 
         assertEquals("file-uploaded-456", uploaded.id)
-        assertEquals("test-batch.ndjson.gz", uploaded.name)
+        assertEquals("test-batch.json", uploaded.name)
 
         val executed = transport.executedRequests.first()
         assertEquals("POST", executed.method)
         assertTrue(executed.headers["Content-Type"]?.startsWith("multipart/related") == true)
         val bodyString = String(executed.body!!, Charsets.UTF_8)
-        assertTrue(bodyString.contains("test-batch.ndjson.gz"))
+        assertTrue(bodyString.contains("test-batch.json"))
+        assertTrue(bodyString.contains("application/json"))
         assertTrue(bodyString.contains("batch-111"))
     }
 

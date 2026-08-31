@@ -4,119 +4,104 @@ This document defines the canonical, versioned health-export data format for Rev
 
 ---
 
-## 1. Format selection & rationale: NDJSON + Gzip
+## 1. Format selection & rationale: Standard uncompressed JSON
 
-Reva Health Exporter exports health data batches in **Newline-Delimited JSON (NDJSON)**, compressed with standard **Gzip** (`.ndjson.gz`).
+Reva Health Exporter exports health data batches in standard uncompressed **JSON** (`.json`) with MIME type `application/json`.
 
-### Trade-off analysis: NDJSON vs Single JSON Envelope
+### Batch Structure: JSON Envelope
 
-| Feature | Single Large JSON Envelope | NDJSON (`.ndjson`) + Gzip |
-|---|---|---|
-| **Memory footprint on mobile** | Entire batch (potentially 100,000+ data points) must reside in RAM simultaneously as a JSON DOM tree. | Enables streaming line-by-line reading and writing; current in-memory serializer sorts and buffers per-batch while enabling streaming ingestion in downstream pipelines. |
-| **Recovery from partial corruption** | Any truncation or corrupted byte invalidates the entire file. | Lines prior to a corrupted line remain independently readable and parsable. |
-| **Compression efficiency** | High compression ratio with Gzip. | Extremely high compression ratio with Gzip because repeated JSON field keys across adjacent lines compress down to negligible overhead. |
-| **Batch metadata availability** | Usually at top or bottom of JSON object. | Line 1 is the immutable batch manifest/header (`recordType: "header"`), allowing instant metadata inspection without buffering whole payloads. |
-| **External analysis tools** | Requires loading full JSON in pandas, DuckDB, BigQuery, or jq. | Native, ultra-fast streaming in `jq`, `duckdb`, `spark`, Python generators, and Unix tools (`zcat`, `grep`, `wc -l`). |
-
-### Decision
-Batches are serialized as UTF-8 Newline-Delimited JSON (`.ndjson`), optionally compressed with standard Gzip (`.ndjson.gz`).
-
----
-
-## 2. Batch structure & envelope semantics
-
-An export batch consists of:
-1. **Line 1: Batch Header (Manifest):** A JSON object containing schema version, installation ID, batch ID, creation time, covered time window, record count, and distinct record types.
-2. **Lines 2..N: Canonical Health Records:** Exactly one compact JSON object per line, sorted deterministically by `startTime` ASC, then `recordType` ASC, then `recordId` ASC.
-
-### Batch Header (`recordType: "header"`)
+Each batch file is a standalone JSON document structured as:
 
 ```json
 {
-  "recordType": "header",
-  "schemaVersion": 1,
-  "installationId": "00000000-0000-4000-8000-000000000001",
-  "batchId": "11111111-1111-4111-8111-111111111111",
-  "createdAt": "2026-08-30T12:00:00Z",
-  "timeWindow": {
-    "startInclusive": "2026-08-29T00:00:00Z",
-    "endExclusive": "2026-08-30T00:00:00Z"
+  "header": {
+    "recordType": "header",
+    "schemaVersion": 1,
+    "installationId": "00000000-0000-4000-8000-000000000001",
+    "batchId": "11111111-1111-4111-8111-111111111111",
+    "createdAt": "2026-08-30T12:00:00Z",
+    "timeWindow": {
+      "startInclusive": "2026-08-29T00:00:00Z",
+      "endExclusive": "2026-08-30T00:00:00Z"
+    },
+    "recordCount": 6,
+    "recordTypes": [
+      "distance",
+      "exercise_session",
+      "heart_rate",
+      "sleep_session",
+      "steps",
+      "total_calories_burned"
+    ]
   },
-  "recordCount": 6,
-  "recordTypes": [
-    "distance",
-    "exercise_session",
-    "heart_rate",
-    "sleep_session",
-    "steps",
-    "total_calories_burned"
+  "records": [
+    ...
   ]
 }
 ```
 
-#### Batch Header fields
+### Deterministic Ordering
+Records within `"records"` are sorted deterministically:
+1. `startTime` ASC
+2. `recordType` ASC
+3. `endTime` ASC
+4. `recordId` (if present) ASC
 
-| Field | Type | Description |
-|---|---|---|
-| `recordType` | String | Must always equal `"header"`. |
-| `schemaVersion` | Integer | Version of the schema format (currently `1`). |
-| `installationId` | String | Pseudonymous client installation UUID generated upon app installation. |
-| `batchId` | String | Unique UUID identifying this immutable export batch. Retried uploads reuse the same `batchId`. |
-| `createdAt` | String (ISO-8601 UTC) | Timestamp when the batch was assembled on the phone. |
-| `timeWindow.startInclusive` | String (ISO-8601 UTC) | Lower bound of the Health Connect query interval (inclusive). |
-| `timeWindow.endExclusive` | String (ISO-8601 UTC) | Upper bound of the Health Connect query interval (exclusive). Must be strictly after `startInclusive`. |
-| `recordCount` | Integer | Exact count of data records following the header line. |
-| `recordTypes` | Array of Strings | Sorted, distinct list of record types present in the batch. |
+---
+
+## 2. Stripped verbose metadata & privacy
+
+To minimize payload clutter and produce clean, human-readable health exports, internal device provenance and sync metadata are stripped from exported records:
+
+- **Stripped fields:**
+  - `device` (including `manufacturer`, `model`, `type`)
+  - `recordId`
+  - `clientRecordId`
+  - `recordingMethod`
+  - `clientRecordVersion`
+  - `lastModifiedTime`
+
+- **Retained essential fields:**
+  - `recordType` (e.g. `"steps"`, `"heart_rate"`)
+  - `origin` (e.g. `"com.mi.health"`)
+  - `startTime`, `startZoneOffset`
+  - `endTime`, `endZoneOffset`
+  - Metric-specific payload fields (`count`, `samples`, `distanceMeters`, `energyKilocalories`, `title`, `notes`, `stages`, `exerciseType`, `segments`, `laps`, `beatsPerMinute`, `percentage`)
 
 ---
 
 ## 3. Timestamp & timezone semantics
 
-1. **Canonical time format:** All `startTime`, `endTime`, `lastModifiedTime`, `createdAt`, and sample `time` values are represented as strict UTC ISO-8601 strings ending in `Z` (e.g. `"2026-08-30T10:00:00Z"`).
-2. **Local context preservation:** When available from the Health Connect provider or wearable, the source timezone offset is preserved in `startZoneOffset` and `endZoneOffset` (e.g. `"+03:00"`, `"-05:00"`, `"Z"`). If unknown or not reported by the companion app, the field is `null` (or omitted).
+1. **Canonical time format:** All `startTime`, `endTime`, `createdAt`, and sample `time` values are represented as strict UTC ISO-8601 strings ending in `Z` (e.g. `"2026-08-30T10:00:00Z"`).
+2. **Local context preservation:** When available from the Health Connect provider or wearable, the source timezone offset is preserved in `startZoneOffset` and `endZoneOffset` (e.g. `"+03:00"`, `"-05:00"`, `"Z"`). If unknown or not reported, the field is omitted or `null`.
 3. **Interval invariants:** For all interval records, `startTime <= endTime`.
 
 ---
 
-## 4. Common record metadata
+## 4. Common record format
 
-Every canonical record contains standard provenance and platform metadata:
+Every canonical record contains standard timing and origin metadata:
 
 ```json
 {
   "recordType": "steps",
-  "recordId": "rec_steps_golden_01",
   "origin": "com.mi.health",
   "startTime": "2026-08-29T08:00:00Z",
   "startZoneOffset": "+03:00",
   "endTime": "2026-08-29T08:15:00Z",
   "endZoneOffset": "+03:00",
-  "clientRecordId": "client_steps_01",
-  "clientRecordVersion": 1,
-  "recordingMethod": 1,
-  "device": {
-    "manufacturer": "Xiaomi",
-    "model": "Smart Band 9",
-    "type": 6
-  },
-  "lastModifiedTime": "2026-08-29T08:15:02Z"
+  "count": 1250
 }
 ```
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `recordType` | String | Yes | Canonical type identifier (`steps`, `heart_rate`, `distance`, `total_calories_burned`, `sleep_session`, `exercise_session`, `resting_heart_rate`, `oxygen_saturation`). |
-| `recordId` | String | Yes | Unique ID assigned by Health Connect or source client. |
 | `origin` | String | Yes | Android package name of the app that inserted the record (e.g. `com.mi.health`). |
 | `startTime` | String | Yes | UTC ISO-8601 start timestamp. |
 | `startZoneOffset` | String | No | Zone offset at start (e.g. `"+03:00"`). |
 | `endTime` | String | Yes | UTC ISO-8601 end timestamp. |
 | `endZoneOffset` | String | No | Zone offset at end (e.g. `"+03:00"`). |
-| `clientRecordId` | String | No | Client-provided record ID from companion app. |
-| `clientRecordVersion` | Long | No | Client-provided record version. |
-| `recordingMethod` | Integer | No | Health Connect recording method (`1` = actively recorded, `2` = automatically recorded, `3` = manual entry). |
-| `device` | Object | No | Device metadata (`manufacturer`, `model`, `type` where `2` = watch, `6` = fitness band). |
-| `lastModifiedTime` | String | No | UTC ISO-8601 timestamp of last modification in Health Connect. |
 
 ---
 
@@ -127,7 +112,6 @@ Every canonical record contains standard provenance and platform metadata:
 ```json
 {
   "recordType": "steps",
-  "recordId": "rec_steps_golden_01",
   "origin": "com.mi.health",
   "startTime": "2026-08-29T08:00:00Z",
   "startZoneOffset": "+03:00",
@@ -143,7 +127,6 @@ Every canonical record contains standard provenance and platform metadata:
 ```json
 {
   "recordType": "heart_rate",
-  "recordId": "rec_hr_golden_01",
   "origin": "com.mi.health",
   "startTime": "2026-08-29T08:00:00Z",
   "startZoneOffset": "+03:00",
@@ -161,7 +144,6 @@ Every canonical record contains standard provenance and platform metadata:
 ```json
 {
   "recordType": "distance",
-  "recordId": "rec_dist_golden_01",
   "origin": "com.mi.health",
   "startTime": "2026-08-29T08:00:00Z",
   "startZoneOffset": "+03:00",
@@ -176,7 +158,6 @@ Every canonical record contains standard provenance and platform metadata:
 ```json
 {
   "recordType": "total_calories_burned",
-  "recordId": "rec_cal_golden_01",
   "origin": "com.mi.health",
   "startTime": "2026-08-29T08:00:00Z",
   "startZoneOffset": "+03:00",
@@ -191,7 +172,6 @@ Every canonical record contains standard provenance and platform metadata:
 ```json
 {
   "recordType": "sleep_session",
-  "recordId": "rec_sleep_golden_01",
   "origin": "com.mi.health",
   "startTime": "2026-08-29T00:30:00Z",
   "startZoneOffset": "+03:00",
@@ -211,7 +191,6 @@ Every canonical record contains standard provenance and platform metadata:
 ```json
 {
   "recordType": "exercise_session",
-  "recordId": "rec_ex_golden_01",
   "origin": "com.mi.health",
   "startTime": "2026-08-29T18:00:00Z",
   "startZoneOffset": "+03:00",
@@ -230,7 +209,6 @@ Every canonical record contains standard provenance and platform metadata:
 ```
 
 ### 5.7. Additional Supported Types (Optional per Batch)
-The following types are fully supported in Schema Version 1. They are included when written by a data origin (such as future companion app updates or other sensors), but are omitted when absent from a collection window:
 - `resting_heart_rate`: `"beatsPerMinute": 58` (valid range `1..300`)
 - `oxygen_saturation`: `"percentage": 98.5` (valid range `0.0..100.0`)
 
@@ -240,8 +218,8 @@ The following types are fully supported in Schema Version 1. They are included w
 
 Any batch or record failing the schema invariants throws a specific `InvalidExportSchemaException`:
 - Non-matching schema version.
-- Mismatched `recordCount` or `recordTypes` between header and record lines.
-- Missing required fields, blank IDs, or blank origin package.
+- Mismatched `recordCount` or `recordTypes` between header and record items.
+- Missing required fields or blank origin package.
 - Inverted timestamps (`startTime > endTime` or sample timestamps outside record interval).
 - Out-of-range numeric values (negative counts, negative distances, negative energy, non-positive heart rate).
 - Invalid ISO-8601 formatting or invalid timezone offset formats.
@@ -250,6 +228,7 @@ Any batch or record failing the schema invariants throws a specific `InvalidExpo
 
 ## 7. Schema evolution & compatibility guarantees
 
-1. **Frozen v1 Fixtures:** All future versions of Reva Health Exporter must retain automated compatibility tests against the committed `v1_golden_batch.ndjson` and `v1_golden_batch.ndjson.gz` fixtures.
+1. **Frozen v1 Fixtures:** Compatibility tests are maintained against committed JSON and legacy NDJSON fixtures (`v1_golden_batch.json`, `v1_empty_batch.json`, `v1_golden_batch.ndjson`).
 2. **Additive Non-Breaking Changes:** Adding optional fields to canonical records in v1 is permitted if parsers safely ignore or default them.
-3. **Breaking Schema Changes:** Any breaking change (modifying key semantics, changing canonical units, altering record ordering invariants) requires bumping `schemaVersion` to `2` and creating explicit migration/backward-compatibility adapters.
+3. **Breaking Schema Changes:** Any breaking change requires bumping `schemaVersion` and providing explicit migration adapters.
+
