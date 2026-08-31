@@ -223,14 +223,10 @@ class SharedPreferencesExportStateStore(
             ?: preferences.getString(KEY_PENDING_BATCH_NDJSON, null)
             ?: return null
         return try {
-            if (serialized.trimStart().startsWith("{") && serialized.contains("\"header\"") && serialized.contains("\"records\"")) {
+            try {
                 serializer.parseJson(serialized)
-            } else {
-                try {
-                    serializer.parseJson(serialized)
-                } catch (_: Exception) {
-                    serializer.parseNdjson(serialized)
-                }
+            } catch (_: Exception) {
+                serializer.parseNdjson(serialized)
             }
         } catch (_: Exception) {
             // Quarantine corrupt pending batch entry safely

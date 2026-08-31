@@ -482,4 +482,49 @@ class ExportBatchSerializerTest {
             serializer.parseJson(json)
         }
     }
+
+    @Test
+    fun jsonSerializationDeterministicForSameTimeRecordsWithNullIds() {
+        val window = TimeWindow(
+            startInclusive = Instant.parse("2026-08-29T00:00:00Z"),
+            endExclusive = Instant.parse("2026-08-30T00:00:00Z"),
+        )
+        val rec1 = CanonicalStepsRecord(
+            startTime = Instant.parse("2026-08-29T08:00:00Z"),
+            startZoneOffset = ZoneOffset.UTC,
+            endTime = Instant.parse("2026-08-29T08:15:00Z"),
+            endZoneOffset = ZoneOffset.UTC,
+            metadata = RecordMetadata(origin = "com.mi.health"),
+            count = 100,
+        )
+        val rec2 = CanonicalStepsRecord(
+            startTime = Instant.parse("2026-08-29T08:00:00Z"),
+            startZoneOffset = ZoneOffset.UTC,
+            endTime = Instant.parse("2026-08-29T08:15:00Z"),
+            endZoneOffset = ZoneOffset.UTC,
+            metadata = RecordMetadata(origin = "com.mi.health"),
+            count = 200,
+        )
+        val batch1 = ExportBatch(
+            header = BatchHeader(
+                schemaVersion = 1,
+                installationId = "inst-tie",
+                batchId = "batch-tie",
+                createdAt = Instant.parse("2026-08-30T00:00:00Z"),
+                timeWindow = window,
+                recordCount = 2,
+                recordTypes = listOf("steps"),
+            ),
+            records = listOf(rec1, rec2),
+        )
+        val batch2 = batch1.copy(records = listOf(rec2, rec1))
+
+        val json1 = serializer.serializeToJson(batch1)
+        val json2 = serializer.serializeToJson(batch2)
+        assertEquals(json1, json2)
+
+        val ndjson1 = serializer.serializeToNdjson(batch1)
+        val ndjson2 = serializer.serializeToNdjson(batch2)
+        assertEquals(ndjson1, ndjson2)
+    }
 }

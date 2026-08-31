@@ -32,7 +32,8 @@ open class ExportBatchSerializer {
                     { it.startTime },
                     { it.recordType },
                     { it.endTime },
-                    { it.metadata.recordId ?: "" },
+                    { it.metadata.recordId ?: it.metadata.clientRecordId ?: "" },
+                    { it.toJson().toString() },
                 ),
             )
             val recordsArray = JsonArray()
@@ -83,7 +84,8 @@ open class ExportBatchSerializer {
                 { it.startTime },
                 { it.recordType },
                 { it.endTime },
-                { it.metadata.recordId ?: "" },
+                { it.metadata.recordId ?: it.metadata.clientRecordId ?: "" },
+                { it.toJson().toString() },
             ),
         )
         for (record in sortedRecords) {

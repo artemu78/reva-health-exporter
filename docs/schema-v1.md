@@ -24,28 +24,33 @@ Each batch file is a standalone JSON document structured as:
       "startInclusive": "2026-08-29T00:00:00Z",
       "endExclusive": "2026-08-30T00:00:00Z"
     },
-    "recordCount": 6,
+    "recordCount": 1,
     "recordTypes": [
-      "distance",
-      "exercise_session",
-      "heart_rate",
-      "sleep_session",
-      "steps",
-      "total_calories_burned"
+      "steps"
     ]
   },
   "records": [
-    ...
+    {
+      "recordType": "steps",
+      "origin": "com.mi.health",
+      "startTime": "2026-08-29T08:00:00Z",
+      "startZoneOffset": "+03:00",
+      "endTime": "2026-08-29T08:15:00Z",
+      "endZoneOffset": "+03:00",
+      "count": 1250
+    }
   ]
 }
 ```
 
 ### Deterministic Ordering
-Records within `"records"` are sorted deterministically:
+Records within `"records"` are sorted deterministically prior to export:
 1. `startTime` ASC
 2. `recordType` ASC
 3. `endTime` ASC
-4. `recordId` (if present) ASC
+4. `recordId` / internal content tie-breaker ASC
+
+*(Note: `recordId` serves as an internal tie-breaker during sorting before metadata stripping; public exported JSON records omit `recordId`.)*
 
 ---
 
@@ -228,7 +233,8 @@ Any batch or record failing the schema invariants throws a specific `InvalidExpo
 
 ## 7. Schema evolution & compatibility guarantees
 
-1. **Frozen v1 Fixtures:** Compatibility tests are maintained against committed JSON and legacy NDJSON fixtures (`v1_golden_batch.json`, `v1_empty_batch.json`, `v1_golden_batch.ndjson`).
-2. **Additive Non-Breaking Changes:** Adding optional fields to canonical records in v1 is permitted if parsers safely ignore or default them.
-3. **Breaking Schema Changes:** Any breaking change requires bumping `schemaVersion` and providing explicit migration adapters.
+1. **Primary Container vs Legacy Streams:** Standard exports use uncompressed JSON (`.json`) envelopes. `ExportBatchSerializer` maintains backward compatibility for parsing and serializing NDJSON (`.ndjson`) and Gzip-compressed NDJSON (`.ndjson.gz`).
+2. **Frozen v1 Fixtures:** Automated compatibility tests are maintained against committed JSON and legacy NDJSON fixtures (`v1_golden_batch.json`, `v1_empty_batch.json`, `v1_golden_batch.ndjson`).
+3. **Additive Non-Breaking Changes:** Adding optional fields to canonical records in v1 is permitted if parsers safely ignore or default them.
+4. **Breaking Schema Changes:** Any breaking schema changes (modifying key semantics, changing canonical units, or altering required payload structure) require bumping `schemaVersion` and providing explicit migration adapters.
 
