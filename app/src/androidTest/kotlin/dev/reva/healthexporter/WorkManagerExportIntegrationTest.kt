@@ -77,9 +77,8 @@ class WorkManagerExportIntegrationTest {
         stateStore = SharedPreferencesExportStateStore(context)
         stateStore.clear()
 
-        client.setPackageName("com.mi.health")
         runBlocking {
-            client.insertRecords(createRecords())
+            insertTrustedRecords()
         }
 
         ExportWorker.clock = clock
@@ -250,5 +249,13 @@ class WorkManagerExportIntegrationTest {
             TotalCaloriesBurnedRecord(start, null, end, null, Energy.kilocalories(20.0), Metadata.manualEntry()),
             SleepSessionRecord(start, null, end, null, Metadata.manualEntry()),
         )
+    }
+
+    private suspend fun insertTrustedRecords() {
+        val records = createRecords()
+        client.setPackageName("com.xiaomi.wearable")
+        client.insertRecords(records.filter { it is StepsRecord || it is HeartRateRecord || it is SleepSessionRecord })
+        client.setPackageName("com.google.android.apps.fitness")
+        client.insertRecords(records.filter { it is DistanceRecord || it is TotalCaloriesBurnedRecord })
     }
 }
