@@ -26,15 +26,26 @@ run URL and test counts below before release.
 
 ## Personal signed APK
 
-Keep the keystore outside the repository and export these variables locally:
+Keep the keystore outside the repository. Export only its path and alias directly; obtain the
+passwords through a protected secret-injection tool or prompt for them silently. For example,
+in Bash:
 
-```sh
+```bash
 export ANDROID_KEYSTORE_PATH=/absolute/path/to/private-release.jks
-export ANDROID_KEYSTORE_PASSWORD='<from password manager>'
 export ANDROID_KEY_ALIAS='<release alias>'
-export ANDROID_KEY_PASSWORD='<from password manager>'
-./gradlew clean test lintRelease assembleRelease
+(
+  read -r -s -p 'Keystore password: ' ANDROID_KEYSTORE_PASSWORD
+  printf '\n'
+  read -r -s -p 'Key password: ' ANDROID_KEY_PASSWORD
+  printf '\n'
+  export ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD
+  ./gradlew clean test lintRelease assembleRelease
+)
 ```
+
+The password values are scoped to the subshell and do not appear in shell history. Do not put
+real passwords directly in `export` commands, scripts, documentation, or committed environment
+files.
 
 Verify `app/build/outputs/apk/release/app-release.apk` with the newest installed Android SDK
 build tools:
