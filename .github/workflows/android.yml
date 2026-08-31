@@ -44,6 +44,7 @@ jobs:
 
   signed-release-candidate:
     name: Permanently signed release candidate
+    needs: fast-checks
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 25
