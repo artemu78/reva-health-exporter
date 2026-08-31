@@ -5,6 +5,7 @@ import java.nio.file.Path
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.io.path.readText
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -80,6 +81,7 @@ class ApplicationContractTest {
         assertTrue(script.contains("verify-schema-v1-fixtures"))
         assertTrue(script.contains("verify-repository-privacy"))
         assertTrue(script.contains("git grep -nI -E -e"))
+        assertFalse(script.contains(":!scripts/verify-release-acceptance.sh"))
 
         val guide = acceptanceGuide.readText()
         assertTrue(guide.contains("Clean install"))

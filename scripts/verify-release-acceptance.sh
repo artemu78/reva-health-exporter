@@ -32,7 +32,7 @@ verify-repository-privacy() {
     set +e
     secret_matches=$(git grep -nI -E -e \
         '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|AIza[0-9A-Za-z_-]{30,}|gh[pousr]_[0-9A-Za-z]{30,}' \
-        -- . ':!scripts/verify-release-acceptance.sh')
+        -- .)
     grep_status=$?
     set -e
     if ((grep_status > 1)); then
