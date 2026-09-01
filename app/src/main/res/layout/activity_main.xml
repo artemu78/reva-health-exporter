@@ -141,6 +141,13 @@
             android:orientation="vertical" />
 
         <Button
+            android:id="@+id/export_history_load_more"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/export_history_load_more" />
+
+        <Button
             android:id="@+id/export_history_upload_selected"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

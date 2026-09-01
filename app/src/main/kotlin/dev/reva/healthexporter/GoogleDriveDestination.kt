@@ -74,6 +74,14 @@ interface GoogleDriveGateway {
         content: ByteArray,
     ): GoogleDriveFile
 
+    suspend fun updateFile(
+        fileId: String,
+        name: String,
+        mimeType: String,
+        appProperties: Map<String, String>,
+        content: ByteArray,
+    ): GoogleDriveFile
+
     suspend fun downloadFile(fileId: String): ByteArray
 }
 
@@ -155,15 +163,7 @@ class GoogleDriveDestination(
                 filename = filename,
             )
 
-            if (existingFile != null) {
-                return UploadResult.Success(
-                    batchId = batch.header.batchId,
-                    location = existingFile.id,
-                )
-            }
-
             val jsonBytes = serializer.serializeToJson(batch).toByteArray(Charsets.UTF_8)
-
             val appProperties = mapOf(
                 "batchId" to batch.header.batchId,
                 "installationId" to batch.header.installationId,
@@ -173,6 +173,20 @@ class GoogleDriveDestination(
                 "historyStatus" to HistoryBatchStatus.CONFIRMED.name,
                 "historyUpdatedAt" to batch.header.createdAt.toString(),
             )
+
+            if (existingFile != null) {
+                val updatedFile = driveGateway.updateFile(
+                    fileId = existingFile.id,
+                    name = filename,
+                    mimeType = "application/json",
+                    appProperties = appProperties,
+                    content = jsonBytes,
+                )
+                return UploadResult.Success(
+                    batchId = batch.header.batchId,
+                    location = updatedFile.id,
+                )
+            }
 
             val uploadedFile = driveGateway.uploadFile(
                 name = filename,
@@ -393,6 +407,51 @@ class HttpGoogleDriveGateway(
         )
 
         val response = transport.execute(request)
+        handlePotentialError(response)
+        return parseDriveFile(response.bodyAsString)
+    }
+
+    override suspend fun updateFile(
+        fileId: String,
+        name: String,
+        mimeType: String,
+        appProperties: Map<String, String>,
+        content: ByteArray,
+    ): GoogleDriveFile {
+        val token = getValidToken()
+        val boundary = "===============RevaDriveUpdate${UUID.randomUUID()}="
+        val metadataObj = JsonObject().apply {
+            addProperty("name", name)
+            if (appProperties.isNotEmpty()) {
+                add("appProperties", JsonObject().apply {
+                    appProperties.forEach { (key, value) -> addProperty(key, value) }
+                })
+            }
+        }
+        val headerPart = buildString {
+            append("--$boundary\r\n")
+            append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
+            append(gson.toJson(metadataObj))
+            append("\r\n--$boundary\r\n")
+            append("Content-Type: $mimeType\r\n\r\n")
+        }.toByteArray(Charsets.UTF_8)
+        val footerPart = "\r\n--$boundary--\r\n".toByteArray(Charsets.UTF_8)
+        val body = ByteArray(headerPart.size + content.size + footerPart.size).also {
+            System.arraycopy(headerPart, 0, it, 0, headerPart.size)
+            System.arraycopy(content, 0, it, headerPart.size, content.size)
+            System.arraycopy(footerPart, 0, it, headerPart.size + content.size, footerPart.size)
+        }
+        val response = transport.execute(
+            HttpRequest(
+                method = "PATCH",
+                url = "$uploadBaseUrl/files/$fileId?uploadType=multipart&fields=id,name,mimeType,parents,appProperties,createdTime",
+                headers = mapOf(
+                    "Authorization" to "Bearer $token",
+                    "Content-Type" to "multipart/related; boundary=$boundary",
+                ),
+                body = body,
+            ),
+        )
         handlePotentialError(response)
         return parseDriveFile(response.bodyAsString)
     }

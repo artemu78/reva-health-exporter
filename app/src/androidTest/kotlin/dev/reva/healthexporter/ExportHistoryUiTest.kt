@@ -23,7 +23,13 @@ class ExportHistoryUiTest {
                 assertEquals(14, rows.childCount)
                 val first = rows.getChildAt(0) as CheckBox
                 assertTrue(first.text.toString().contains("Unknown"))
-                assertFalse(first.isEnabled)
+                assertTrue(first.isEnabled)
+                assertEquals(
+                    activity.getString(R.string.export_history_load_more),
+                    activity.findViewById<Button>(R.id.export_history_load_more).text.toString(),
+                )
+                activity.findViewById<Button>(R.id.export_history_load_more).performClick()
+                assertEquals(24, rows.childCount)
                 assertFalse(activity.findViewById<Button>(R.id.export_history_upload_selected).isEnabled)
                 assertTrue(activity.findViewById<TextView>(R.id.export_history_timezone).text.toString().startsWith("Calendar timezone:"))
                 assertEquals(View.VISIBLE, activity.findViewById<TextView>(R.id.export_history_title).visibility)

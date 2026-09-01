@@ -126,6 +126,11 @@ class MainActivity : ComponentActivity() {
             triggerDriveExport()
         }
         findViewById<Button>(R.id.export_history_refresh).setOnClickListener { refreshExportHistory() }
+        findViewById<Button>(R.id.export_history_load_more).setOnClickListener {
+            val entries = historyDestinationKey?.let(exportHistoryStore::entries).orEmpty()
+            exportHistoryPresenter.loadMore(entries)
+            renderExportHistory()
+        }
         findViewById<Button>(R.id.export_history_upload_selected).setOnClickListener { confirmBackfill() }
         showInitialExportHistory(inventoryKnown = false)
         renderDriveAuthorization(driveAuthorizationCoordinator.state)
@@ -211,7 +216,6 @@ class MainActivity : ComponentActivity() {
                 addView(CheckBox(this@MainActivity).apply {
                     text = "${row.date} — ${coverageLabel(row.coverage)}"
                     isChecked = row.selected
-                    isEnabled = row.coverage != DayCoverage.UPLOADED && row.coverage != DayCoverage.UNKNOWN
                     contentDescription = text
                     setOnClickListener {
                         exportHistoryPresenter.toggle(row.date)

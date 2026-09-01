@@ -123,7 +123,12 @@ class ExportHistoryTest {
         assertTrue(history.entries("destination-a").all { it.status == HistoryBatchStatus.CONFIRMED })
 
         backfill.uploadDays(listOf(dates[0]), moscow)
-        assertEquals(2, destination.uploadedBatches.size)
+        assertEquals(3, destination.uploadedBatches.size)
+        assertEquals(
+            stableBackfillBatchId("destination-a", localDayWindow(dates[0], moscow)),
+            destination.uploadedBatches.last().header.batchId,
+        )
+        assertEquals(3, reader.windows.size)
     }
 
     @Test
@@ -206,6 +211,41 @@ class ExportHistoryTest {
         assertFalse(presenter.state.uploadStarted)
         presenter.confirmUpload()
         assertTrue(presenter.state.uploadStarted)
+    }
+
+    @Test
+    fun presenterAllowsPreviouslyUploadedAndUnknownDaysToBeSelectedAgain() {
+        val uploadedDate = LocalDate.parse("2026-08-30")
+        val unknownDate = LocalDate.parse("2026-08-29")
+        val presenter = ExportHistoryPresenter(moscow)
+        presenter.show(
+            dates = listOf(uploadedDate),
+            entries = listOf(entry("uploaded", localDayWindow(uploadedDate, moscow), HistoryBatchStatus.CONFIRMED)),
+            inventoryKnown = true,
+        )
+
+        presenter.toggle(uploadedDate)
+        assertTrue(presenter.state.rows.single().selected)
+
+        presenter.show(listOf(unknownDate), emptyList(), inventoryKnown = false)
+        presenter.toggle(unknownDate)
+        assertTrue(presenter.state.rows.single().selected)
+    }
+
+    @Test
+    fun loadMoreAddsExactlyTenEarlierCalendarDates() {
+        val presenter = ExportHistoryPresenter(moscow)
+        presenter.show(
+            dates = (0L until 14L).map { LocalDate.parse("2026-08-30").minusDays(it) },
+            entries = emptyList(),
+            inventoryKnown = true,
+        )
+
+        presenter.loadMore(entries = emptyList())
+
+        assertEquals(24, presenter.state.rows.size)
+        assertEquals(LocalDate.parse("2026-08-07"), presenter.state.rows.last().date)
+        assertEquals(24, presenter.state.rows.map { it.date }.distinct().size)
     }
 
     private fun entry(

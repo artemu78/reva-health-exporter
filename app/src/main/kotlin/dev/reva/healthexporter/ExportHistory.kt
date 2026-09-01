@@ -298,12 +298,10 @@ class ManualBackfillCoordinator(
         val emptyDates = mutableListOf<LocalDate>()
         for (date in dates.distinct().sorted()) {
             val day = localDayWindow(date, zoneId)
-            for (window in missingIntervals(day, historyStore.entries(destinationKey))) {
-                when (val result = uploadWindow(window, zoneId)) {
-                    is WindowUploadResult.Confirmed -> confirmed += result.entry
-                    WindowUploadResult.Empty -> emptyDates += date
-                    is WindowUploadResult.Stopped -> return result.result
-                }
+            when (val result = uploadWindow(day, zoneId)) {
+                is WindowUploadResult.Confirmed -> confirmed += result.entry
+                WindowUploadResult.Empty -> emptyDates += date
+                is WindowUploadResult.Stopped -> return result.result
             }
         }
         return summarizeBackfill(confirmed, emptyDates)
@@ -403,6 +401,7 @@ data class ExportHistoryRow(val date: LocalDate, val coverage: DayCoverage, val 
 data class ExportHistoryScreenState(
     val zoneId: ZoneId,
     val rows: List<ExportHistoryRow> = emptyList(),
+    val inventoryKnown: Boolean = false,
     val canUpload: Boolean = false,
     val uploadStarted: Boolean = false,
 )
@@ -414,15 +413,26 @@ class ExportHistoryPresenter(private val zoneId: ZoneId = ZoneId.systemDefault()
     fun show(dates: List<LocalDate>, entries: List<ExportHistoryEntry>, inventoryKnown: Boolean) {
         state = state.copy(rows = dates.map { date ->
             ExportHistoryRow(date, classifyDayCoverage(localDayWindow(date, zoneId), entries, inventoryKnown), false)
-        }, canUpload = false, uploadStarted = false)
+        }, inventoryKnown = inventoryKnown, canUpload = false, uploadStarted = false)
     }
     fun toggle(date: LocalDate) {
         val rows = state.rows.map { row ->
-            if (row.date == date && row.coverage != DayCoverage.UPLOADED && row.coverage != DayCoverage.UNKNOWN) {
-                row.copy(selected = !row.selected)
-            } else row
+            if (row.date == date) row.copy(selected = !row.selected) else row
         }
         state = state.copy(rows = rows, canUpload = rows.any { it.selected })
+    }
+    fun loadMore(entries: List<ExportHistoryEntry>, count: Int = 10) {
+        require(count > 0)
+        val oldestDate = state.rows.minOfOrNull { it.date } ?: LocalDate.now(zoneId).plusDays(1)
+        val earlierRows = (1L..count.toLong()).map { offset ->
+            val date = oldestDate.minusDays(offset)
+            ExportHistoryRow(
+                date,
+                classifyDayCoverage(localDayWindow(date, zoneId), entries, state.inventoryKnown),
+                selected = false,
+            )
+        }
+        state = state.copy(rows = state.rows + earlierRows)
     }
     fun requestConfirmation(): BackfillConfirmation {
         val dates = state.rows.filter { it.selected }.map { it.date }.sorted()

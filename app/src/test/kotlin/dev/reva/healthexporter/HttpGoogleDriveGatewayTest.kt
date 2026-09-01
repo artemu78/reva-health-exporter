@@ -189,6 +189,30 @@ class HttpGoogleDriveGatewayTest {
     }
 
     @Test
+    fun `updateFile patches existing file content with multipart upload`() = runBlocking {
+        val transport = FakeHttpTransport().apply {
+            responseToReturn = HttpResponse(
+                statusCode = 200,
+                body = """{"id":"existing-123","name":"day.json","mimeType":"application/json"}""".toByteArray(),
+            )
+        }
+        val gateway = HttpGoogleDriveGateway(tokenProvider = { "valid-token" }, transport = transport)
+
+        gateway.updateFile(
+            fileId = "existing-123",
+            name = "day.json",
+            mimeType = "application/json",
+            appProperties = mapOf("batchId" to "backfill-day"),
+            content = "replacement".toByteArray(),
+        )
+
+        val request = transport.executedRequests.single()
+        assertEquals("PATCH", request.method)
+        assertTrue(request.url.contains("/files/existing-123?uploadType=multipart"))
+        assertTrue(String(request.body!!).contains("replacement"))
+    }
+
+    @Test
     fun `downloadFile fetches media bytes via alt=media`() = runBlocking {
         val transport = FakeHttpTransport()
         val binaryData = byteArrayOf(0x1f, 0x8b.toByte(), 0x08, 0x00)

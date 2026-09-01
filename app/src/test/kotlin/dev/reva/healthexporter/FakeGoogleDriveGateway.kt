@@ -39,6 +39,7 @@ class FakeGoogleDriveGateway(
     var simulateIndeterminateUploadSuccess: Boolean = false
 
     var uploadCallCount = 0
+    var updateCallCount = 0
     var createFolderCallCount = 0
     var findFoldersCallCount = 0
     var findFilesCallCount = 0
@@ -127,6 +128,30 @@ class FakeGoogleDriveGateway(
         files.add(file)
         fileContents[file.id] = content
         return file
+    }
+
+    override suspend fun updateFile(
+        fileId: String,
+        name: String,
+        mimeType: String,
+        appProperties: Map<String, String>,
+        content: ByteArray,
+    ): GoogleDriveFile {
+        updateCallCount++
+        failOnUploadFile?.let { throw it }
+        val index = files.indexOfFirst { it.id == fileId }
+        if (index < 0) {
+            throw GoogleDriveException.GeneralDriveException("File with id '$fileId' not found", isRetryable = false)
+        }
+        val updated = files[index].copy(
+            name = name,
+            mimeType = mimeType,
+            appProperties = appProperties,
+            sizeBytes = content.size.toLong(),
+        )
+        files[index] = updated
+        fileContents[fileId] = content
+        return updated
     }
 
     override suspend fun downloadFile(fileId: String): ByteArray {

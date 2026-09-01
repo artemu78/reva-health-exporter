@@ -329,6 +329,28 @@ class GoogleDriveDestinationTest {
         assertEquals("Exactly one file should exist in Drive for the batch", 1, batchFiles.size)
     }
 
+    @Test
+    fun `uploading an existing batch rewrites the same Drive file with current content`() = runBlocking {
+        val gateway = FakeGoogleDriveGateway()
+        val destination = GoogleDriveDestination(driveGateway = gateway)
+        val original = createSampleBatch(batchId = "backfill-day-001")
+        val replacement = original.copy(
+            header = original.header.copy(
+                createdAt = Instant.parse("2026-09-01T12:00:00Z"),
+                recordCount = 0,
+                recordTypes = emptyList(),
+            ),
+            records = emptyList(),
+        )
+
+        val originalResult = destination.upload(original) as UploadResult.Success
+        val replacementResult = destination.upload(replacement) as UploadResult.Success
+
+        assertEquals(originalResult.location, replacementResult.location)
+        assertEquals(1, gateway.files.count { it.mimeType == "application/json" })
+        assertEquals(0, serializer.parseJson(String(gateway.downloadFile(originalResult.location!!))).records.size)
+    }
+
     // 5. Account isolation test
 
     @Test
