@@ -64,7 +64,7 @@ class DriveAuthorizationCoordinatorTest {
     }
 
     @Test
-    fun `disconnect clears local account and account switch replaces it`() {
+    fun `disconnect immediately clears local account and account switch replaces it`() {
         val (coordinator, gateway) = coordinator()
         coordinator.complete(DriveAuthorizationResult.Authorized("account-a"))
 
@@ -74,7 +74,7 @@ class DriveAuthorizationCoordinatorTest {
 
         coordinator.disconnect()
         assertEquals(1, gateway.disconnectCount)
-        assertEquals(DriveAuthorizationState.Disconnecting, coordinator.state)
+        assertEquals(DriveAuthorizationState.Disconnected, coordinator.state)
 
         gateway.disconnectCompletion?.invoke(DriveDisconnectionResult.Disconnected)
         assertEquals(DriveAuthorizationState.Disconnected, coordinator.state)
@@ -91,14 +91,14 @@ class DriveAuthorizationCoordinatorTest {
     }
 
     @Test
-    fun `disconnect failure remains recoverable instead of escaping to the activity`() {
+    fun `disconnect failure keeps the local state disconnected`() {
         val (coordinator, gateway) = coordinator()
         coordinator.complete(DriveAuthorizationResult.Authorized("account-a"))
         gateway.disconnectError = IllegalStateException("synthetic revocation failure")
 
         coordinator.disconnect()
 
-        assertEquals(DriveAuthorizationState.UserActionRequired, coordinator.state)
+        assertEquals(DriveAuthorizationState.Disconnected, coordinator.state)
     }
 
     @Test

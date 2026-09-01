@@ -79,18 +79,11 @@ class DriveAuthorizationCoordinator(
     }
 
     fun disconnect() {
-        update(DriveAuthorizationState.Disconnecting)
+        update(DriveAuthorizationState.Disconnected)
         try {
-            gateway.disconnect { result ->
-                update(
-                    when (result) {
-                        DriveDisconnectionResult.Disconnected -> DriveAuthorizationState.Disconnected
-                        DriveDisconnectionResult.Failed -> DriveAuthorizationState.UserActionRequired
-                    },
-                )
-            }
+            gateway.disconnect { }
         } catch (_: Exception) {
-            update(DriveAuthorizationState.UserActionRequired)
+            // Local authorization state is already cleared; remote revocation is best-effort.
         }
     }
 

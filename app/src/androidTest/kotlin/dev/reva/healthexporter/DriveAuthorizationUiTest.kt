@@ -41,7 +41,7 @@ class DriveAuthorizationUiTest {
             scenario.onActivity { activity ->
                 assertEquals(0, gateway.launches)
                 assertEquals(
-                    "Google Drive is not connected.",
+                    "",
                     activity.findViewById<TextView>(R.id.drive_authorization_status).text.toString(),
                 )
 
@@ -71,7 +71,48 @@ class DriveAuthorizationUiTest {
     }
 
     @Test
-    fun disconnect_failure_keeps_the_activity_open_with_a_recovery_action() {
+    fun successful_disconnect_restores_the_single_connect_action_and_clears_drive_messages() {
+        val gateway = FakeGateway()
+        MainActivity.driveAuthorizationGatewayFactory = { _, complete ->
+            gateway.onLaunch = { complete(DriveAuthorizationResult.Authorized("synthetic-account")) }
+            gateway
+        }
+
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.findViewById<Button>(R.id.drive_connect).performClick()
+                activity.findViewById<Button>(R.id.drive_disconnect).performClick()
+
+                assertEquals(
+                    android.view.View.VISIBLE,
+                    activity.findViewById<Button>(R.id.drive_connect).visibility,
+                )
+                assertEquals(
+                    android.view.View.GONE,
+                    activity.findViewById<Button>(R.id.drive_reconnect).visibility,
+                )
+                assertEquals(
+                    android.view.View.GONE,
+                    activity.findViewById<Button>(R.id.drive_disconnect).visibility,
+                )
+                assertEquals(
+                    android.view.View.GONE,
+                    activity.findViewById<Button>(R.id.drive_export_now).visibility,
+                )
+                assertEquals(
+                    "",
+                    activity.findViewById<TextView>(R.id.drive_authorization_status).text.toString(),
+                )
+                assertEquals(
+                    "",
+                    activity.findViewById<TextView>(R.id.drive_export_status).text.toString(),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun disconnect_failure_still_restores_the_local_connect_action() {
         lateinit var completeAuthorization: (DriveAuthorizationResult) -> Unit
         val gateway = object : DriveAuthorizationGateway {
             override fun launchAuthorization() {
@@ -93,8 +134,12 @@ class DriveAuthorizationUiTest {
                 activity.findViewById<Button>(R.id.drive_disconnect).performClick()
 
                 assertEquals(
-                    "Google Drive access needs your attention. Reconnect to continue.",
+                    "",
                     activity.findViewById<TextView>(R.id.drive_authorization_status).text.toString(),
+                )
+                assertEquals(
+                    android.view.View.VISIBLE,
+                    activity.findViewById<Button>(R.id.drive_connect).visibility,
                 )
             }
         }
@@ -128,7 +173,10 @@ class DriveAuthorizationUiTest {
     @Test
     fun last_export_summary_is_rendered_in_ui() {
         val gateway = FakeGateway()
-        MainActivity.driveAuthorizationGatewayFactory = { _, _ -> gateway }
+        MainActivity.driveAuthorizationGatewayFactory = { _, complete ->
+            gateway.onLaunch = { complete(DriveAuthorizationResult.Authorized("synthetic-account")) }
+            gateway
+        }
 
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val store = SharedPreferencesExportStateStore(context)
@@ -144,6 +192,7 @@ class DriveAuthorizationUiTest {
 
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
+                activity.findViewById<Button>(R.id.drive_connect).performClick()
                 val statusView = activity.findViewById<TextView>(R.id.drive_export_status)
                 val text = statusView.text.toString()
                 assertTrue(text.contains("batch-ui-100"))
@@ -154,4 +203,3 @@ class DriveAuthorizationUiTest {
         store.clear()
     }
 }
-

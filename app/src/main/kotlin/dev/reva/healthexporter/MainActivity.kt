@@ -147,7 +147,7 @@ class MainActivity : ComponentActivity() {
 
     fun renderDriveAuthorization(state: DriveAuthorizationState) {
         findViewById<TextView>(R.id.drive_authorization_status).text = when (state) {
-            DriveAuthorizationState.Disconnected -> getString(R.string.drive_disconnected)
+            DriveAuthorizationState.Disconnected -> ""
             DriveAuthorizationState.Connecting -> getString(R.string.drive_connecting)
             is DriveAuthorizationState.Connected -> getString(R.string.drive_connected)
             DriveAuthorizationState.Disconnecting -> getString(R.string.drive_disconnecting)
@@ -171,6 +171,7 @@ class MainActivity : ComponentActivity() {
             ExportScheduler.cancelPeriodicExport(this)
             historyDestinationKey = null
             showInitialExportHistory(inventoryKnown = false)
+            findViewById<TextView>(R.id.export_history_status).text = ""
         }
         renderExportStatus()
     }
@@ -316,6 +317,11 @@ class MainActivity : ComponentActivity() {
 
     private fun renderExportStatus() {
         val statusView = findViewById<TextView>(R.id.drive_export_status)
+        val state = driveAuthorizationCoordinator.state
+        if (state !is DriveAuthorizationState.Connected) {
+            statusView.text = ""
+            return
+        }
         val lastSummary = exportStateStore.getLastExecutionSummary()
         if (lastSummary != null) {
             statusView.text = when (lastSummary.outcome) {
@@ -331,12 +337,7 @@ class MainActivity : ComponentActivity() {
                 -> getString(R.string.drive_export_status_failure, lastSummary.message)
             }
         } else {
-            val state = driveAuthorizationCoordinator.state
-            if (state is DriveAuthorizationState.Connected) {
-                statusView.text = getString(R.string.drive_export_status_periodic_scheduled)
-            } else {
-                statusView.text = ""
-            }
+            statusView.text = getString(R.string.drive_export_status_periodic_scheduled)
         }
     }
 
