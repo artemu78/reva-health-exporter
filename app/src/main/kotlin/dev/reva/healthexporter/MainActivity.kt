@@ -175,12 +175,13 @@ class MainActivity : ComponentActivity() {
         renderExportStatus()
     }
 
-    private fun recentHistoryDates(): List<LocalDate> = (0L until 14L).map { LocalDate.now().minusDays(it) }
+    private fun recentHistoryDates(count: Int = 14): List<LocalDate> =
+        (0L until count.toLong()).map { LocalDate.now().minusDays(it) }
 
-    private fun showInitialExportHistory(inventoryKnown: Boolean) {
+    private fun showInitialExportHistory(inventoryKnown: Boolean, visibleDateCount: Int = 14) {
         val key = historyDestinationKey
         exportHistoryPresenter.show(
-            recentHistoryDates(),
+            recentHistoryDates(visibleDateCount),
             if (key == null) emptyList() else exportHistoryStore.entries(key),
             inventoryKnown,
         )
@@ -195,12 +196,16 @@ class MainActivity : ComponentActivity() {
             return
         }
         findViewById<TextView>(R.id.export_history_status).text = getString(R.string.export_history_refreshing)
+        val visibleDateCount = exportHistoryPresenter.state.rows.size.coerceAtLeast(14)
         lifecycleScope.launch {
             val gateway = googleDriveGatewayFactory(this@MainActivity, auth.accountId)
             val result = DriveHistoryInventoryRefresher(
                 gateway, exportHistoryStore, exportStateStore.getInstallationId(), key,
             ).refresh()
-            showInitialExportHistory(inventoryKnown = result is HistoryRefreshResult.Success)
+            showInitialExportHistory(
+                inventoryKnown = result is HistoryRefreshResult.Success,
+                visibleDateCount = visibleDateCount,
+            )
             findViewById<TextView>(R.id.export_history_status).text =
                 if (result is HistoryRefreshResult.Unknown) result.reason else ""
         }
