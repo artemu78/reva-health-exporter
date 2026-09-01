@@ -161,12 +161,20 @@ install_status=$?
 set -e
 printf '%s\n' "$install_output"
 
-if ((install_status != 0)); then
+if ((install_status != 0)) && [[ "$install_output" == *"INSTALL_FAILED_USER_RESTRICTED"* ]]; then
+    fail "Android/MIUI blocked installation. Unlock the phone, enable Developer options > Install via USB, and approve the installation prompt, then rerun this script. A clean reinstall does not bypass this restriction, so no uninstall was attempted."
+fi
+
+if ((install_status != 0)) && [[ "$install_output" == *"INSTALL_FAILED_UPDATE_INCOMPATIBLE"* ]]; then
     echo "The update failed. A clean reinstall erases this app's local state." >&2
     read -r -p "Type reinstall to uninstall the app and install it again: " confirmation
     [[ "$confirmation" == "reinstall" ]] || fail "Reinstall cancelled; no app data was erased."
     "$adb" -s "$adb_target" uninstall "$package_name"
     "$adb" -s "$adb_target" install "$apk_path"
+fi
+
+if ((install_status != 0)) && [[ "$install_output" != *"INSTALL_FAILED_UPDATE_INCOMPATIBLE"* ]]; then
+    fail "Installation failed. No uninstall was attempted; inspect the ADB error above."
 fi
 
 package_dump=$("$adb" -s "$adb_target" shell dumpsys package "$package_name")
