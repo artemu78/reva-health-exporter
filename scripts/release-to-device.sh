@@ -85,6 +85,11 @@ origin_main_sha=$(git rev-parse origin/main)
 [[ "$head_sha" == "$origin_main_sha" ]] || fail "Local main must exactly match origin/main."
 gh auth status >/dev/null
 
+fail_reused_version() {
+    local tag_sha=$1
+    fail "$release_tag already points to commit ${tag_sha:0:12}, but current main is ${head_sha:0:12}. New code was committed without a new app version. Bump both VERSION_CODE and VERSION_NAME in version.properties, commit and push that change, then rerun this script. Existing release tags are not moved."
+}
+
 if [[ -z $(git tag --list "$release_tag") ]]; then
     set +e
     git ls-remote --exit-code --tags origin "refs/tags/$release_tag" >/dev/null
@@ -93,7 +98,7 @@ if [[ -z $(git tag --list "$release_tag") ]]; then
     if ((remote_tag_status == 0)); then
         git fetch origin "refs/tags/$release_tag:refs/tags/$release_tag"
         tag_sha=$(git rev-parse "$release_tag^{}")
-        [[ "$tag_sha" == "$head_sha" ]] || fail "$release_tag points to a different commit."
+        [[ "$tag_sha" == "$head_sha" ]] || fail_reused_version "$tag_sha"
         echo "Reusing existing remote tag $release_tag."
     elif ((remote_tag_status != 2)); then
         fail "Could not inspect remote tag $release_tag."
@@ -104,7 +109,7 @@ if [[ -z $(git tag --list "$release_tag") ]]; then
     fi
 else
     tag_sha=$(git rev-parse "$release_tag^{}")
-    [[ "$tag_sha" == "$head_sha" ]] || fail "$release_tag points to a different commit."
+    [[ "$tag_sha" == "$head_sha" ]] || fail_reused_version "$tag_sha"
     set +e
     git ls-remote --exit-code --tags origin "refs/tags/$release_tag" >/dev/null
     remote_tag_status=$?
