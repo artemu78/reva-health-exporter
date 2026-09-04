@@ -27,19 +27,17 @@ class HealthConnectExportReader(
 
     override suspend fun readRecords(timeWindow: TimeWindow): List<CanonicalRecord> {
         val collectedRecords = mutableListOf<CanonicalRecord>()
-        val seenRecordKeys = mutableSetOf<Pair<String, String>>()
 
         for (recordType in supportedRecordTypes) {
-            readRecordsForType(recordType, timeWindow, seenRecordKeys, collectedRecords)
+            readRecordsForType(recordType, timeWindow, collectedRecords)
         }
 
-        return collectedRecords
+        return ExportRecordCanonicalizer.canonicalize(collectedRecords)
     }
 
     private suspend fun readRecordsForType(
         recordType: KClass<out Record>,
         timeWindow: TimeWindow,
-        seenRecordKeys: MutableSet<Pair<String, String>>,
         destination: MutableList<CanonicalRecord>,
     ) {
         var pageToken: String? = null
@@ -66,7 +64,6 @@ class HealthConnectExportReader(
                 response.records,
                 allowedPackageName,
                 timeWindow,
-                seenRecordKeys,
                 destination,
             )
 
@@ -81,7 +78,6 @@ class HealthConnectExportReader(
         records: List<Record>,
         allowedPackageName: String,
         timeWindow: TimeWindow,
-        seenRecordKeys: MutableSet<Pair<String, String>>,
         destination: MutableList<CanonicalRecord>,
     ) {
         for (record in records) {
@@ -90,10 +86,7 @@ class HealthConnectExportReader(
             if (!canonical.startTime.isBefore(timeWindow.startInclusive) &&
                 canonical.startTime.isBefore(timeWindow.endExclusive)
             ) {
-                val key = canonical.recordType to (canonical.metadata.clientRecordId ?: canonical.metadata.recordId ?: "")
-                if (seenRecordKeys.add(key)) {
-                    destination.add(canonical)
-                }
+                destination.add(canonical)
             }
         }
     }

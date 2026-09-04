@@ -95,6 +95,28 @@ class ExportCoordinatorTest {
         count = 1000,
     )
 
+    private fun createSleepSnapshot(
+        id: String,
+        startTime: Instant,
+        endTime: Instant,
+    ): CanonicalSleepSessionRecord = CanonicalSleepSessionRecord(
+        startTime = startTime,
+        startZoneOffset = ZoneOffset.UTC,
+        endTime = endTime,
+        endZoneOffset = ZoneOffset.UTC,
+        metadata = RecordMetadata(
+            recordId = id,
+            origin = "com.xiaomi.wearable",
+        ),
+        stages = listOf(
+            SleepStage(
+                startTime = startTime,
+                endTime = endTime,
+                stage = 4,
+            ),
+        ),
+    )
+
     @Test
     fun initialExportCreatesBatchPersistsPendingUploadsAndAdvancesCheckpoint() = runBlocking {
         val coordinator = createCoordinator()
@@ -326,6 +348,36 @@ class ExportCoordinatorTest {
         val batch = (result as ExportCycleResult.Success).batch
         assertEquals(1, batch.header.recordCount)
         assertEquals(1, batch.records.size)
+    }
+
+    @Test
+    fun progressiveXiaomiSleepSnapshotsProduceOneLatestSessionInExportedJson() = runBlocking {
+        clock.currentInstant = Instant.parse("2026-09-04T12:00:00Z")
+        val start = Instant.parse("2026-09-03T23:00:00Z")
+        reader.recordsToReturn = listOf(
+            "2026-09-04T01:38:00Z",
+            "2026-09-04T02:22:00Z",
+            "2026-09-04T05:06:00Z",
+            "2026-09-04T06:54:00Z",
+        ).mapIndexed { index, end ->
+            createSleepSnapshot(
+                id = "xiaomi-sleep-revision-$index",
+                startTime = start,
+                endTime = Instant.parse(end),
+            )
+        }.toMutableList()
+
+        val result = createCoordinator().export() as ExportCycleResult.Success
+        val exported = ExportBatchSerializer().parseJson(
+            ExportBatchSerializer().serializeToJson(result.batch),
+        )
+
+        assertEquals(1, exported.header.recordCount)
+        assertEquals(1, exported.records.size)
+        assertEquals(
+            Instant.parse("2026-09-04T06:54:00Z"),
+            exported.records.single().endTime,
+        )
     }
 
     @Test

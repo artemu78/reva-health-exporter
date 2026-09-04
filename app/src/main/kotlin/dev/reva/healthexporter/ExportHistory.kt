@@ -337,9 +337,7 @@ class ManualBackfillCoordinator(
     private suspend fun readRecords(window: TimeWindow): RecordReadResult {
         return try {
             RecordReadResult.Success(
-                recordReader.readRecords(window).distinctBy {
-                    it.recordType to (it.metadata.clientRecordId ?: it.metadata.recordId)
-                },
+                ExportRecordCanonicalizer.canonicalize(recordReader.readRecords(window)),
             )
         } catch (cancellation: CancellationException) {
             throw cancellation
