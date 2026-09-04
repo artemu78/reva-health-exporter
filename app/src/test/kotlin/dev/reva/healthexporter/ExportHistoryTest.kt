@@ -6,6 +6,7 @@ import androidx.health.connect.client.testing.FakeHealthConnectClient
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -172,6 +173,45 @@ class ExportHistoryTest {
         val exported = destination.uploadedBatches.single().records.single() as CanonicalStepsRecord
         assertEquals(200L, exported.count)
         assertEquals("com.xiaomi.wearable", exported.metadata.origin)
+    }
+
+    @Test
+    fun manualBackfillAlsoExportsOnlyLatestProgressiveSleepSnapshot() = runBlocking {
+        val start = Instant.parse("2026-09-03T23:00:00Z")
+        val snapshots = listOf(
+            "2026-09-04T01:38:00Z",
+            "2026-09-04T02:22:00Z",
+            "2026-09-04T05:06:00Z",
+            "2026-09-04T06:54:00Z",
+        ).mapIndexed { index, end ->
+            val endTime = Instant.parse(end)
+            CanonicalSleepSessionRecord(
+                startTime = start,
+                startZoneOffset = ZoneOffset.UTC,
+                endTime = endTime,
+                endZoneOffset = ZoneOffset.UTC,
+                metadata = RecordMetadata(
+                    recordId = "xiaomi-revision-$index",
+                    origin = "com.xiaomi.wearable",
+                ),
+                stages = listOf(SleepStage(start, endTime, 4)),
+            )
+        }
+        val destination = RecordingDestination()
+        val coordinator = ManualBackfillCoordinator(
+            exportStateStore = InMemoryExportStateStore("installation-test"),
+            historyStore = InMemoryExportHistoryStore(),
+            recordReader = RecordingReader(snapshots),
+            destination = destination,
+            destinationKey = "destination-a",
+        )
+
+        val result = coordinator.uploadDays(listOf(LocalDate.parse("2026-09-04")), moscow)
+
+        assertTrue(result is ManualBackfillResult.Success)
+        val batch = destination.uploadedBatches.single()
+        assertEquals(1, batch.header.recordCount)
+        assertEquals(Instant.parse("2026-09-04T06:54:00Z"), batch.records.single().endTime)
     }
 
     @Test

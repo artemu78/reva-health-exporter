@@ -300,6 +300,58 @@ class HealthConnectExportReaderTest {
     }
 
     @Test
+    fun readerChoosesLatestSleepRevisionWhenStableSourceIdIsRepeated() = runBlocking {
+        val originClient = FakeHealthConnectClient()
+        originClient.setPackageName("com.xiaomi.wearable")
+        val start = Instant.parse("2026-08-29T00:30:00Z")
+        originClient.insertRecords(
+            listOf<Record>(
+                SleepSessionRecord(
+                    startTime = start,
+                    startZoneOffset = ZoneOffset.UTC,
+                    endTime = Instant.parse("2026-08-29T02:00:00Z"),
+                    endZoneOffset = ZoneOffset.UTC,
+                    metadata = Metadata.manualEntry(clientRecordId = "stable-sleep-id"),
+                ),
+            ),
+        )
+        val sourceMetadata = originClient.readRecords(
+            ReadRecordsRequest(
+                SleepSessionRecord::class,
+                TimeRangeFilter.between(window.startInclusive, window.endExclusive),
+            ),
+        ).records.single().metadata
+        val sourceOrderedOldestFirst = listOf(
+            SleepSessionRecord(
+                startTime = start,
+                startZoneOffset = ZoneOffset.UTC,
+                endTime = Instant.parse("2026-08-29T02:00:00Z"),
+                endZoneOffset = ZoneOffset.UTC,
+                metadata = sourceMetadata,
+            ),
+            SleepSessionRecord(
+                startTime = start,
+                startZoneOffset = ZoneOffset.UTC,
+                endTime = Instant.parse("2026-08-29T07:30:00Z"),
+                endZoneOffset = ZoneOffset.UTC,
+                metadata = sourceMetadata,
+            ),
+        )
+        val client = FakeHealthConnectClient()
+        client.overrides.readRecords = Stub {
+            ReadRecordsResponse(sourceOrderedOldestFirst, pageToken = null)
+        }
+
+        val records = HealthConnectExportReader(
+            client = client,
+            supportedRecordTypes = listOf(SleepSessionRecord::class),
+        ).readRecords(window)
+
+        assertEquals(1, records.size)
+        assertEquals(Instant.parse("2026-08-29T07:30:00Z"), records.single().endTime)
+    }
+
+    @Test
     fun readerHandlesPaginationCorrectly() = runBlocking {
         val client = FakeHealthConnectClient()
         client.setPackageName("com.xiaomi.wearable")

@@ -201,7 +201,7 @@ class ExportCoordinator(
         timeWindow: TimeWindow,
         rawRecords: List<CanonicalRecord>,
     ): ExportBatch {
-        val deduplicated = rawRecords.distinctBy { it.recordType to (it.metadata.clientRecordId ?: it.metadata.recordId) }
+        val deduplicated = ExportRecordCanonicalizer.canonicalize(rawRecords)
         val installationId = stateStore.getInstallationId()
         val batchId = idGenerator.generateId()
         val recordTypes = deduplicated.map { it.recordType }.distinct().sorted()
