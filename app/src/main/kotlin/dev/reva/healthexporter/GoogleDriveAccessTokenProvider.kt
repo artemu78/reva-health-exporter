@@ -1,7 +1,6 @@
 package dev.reva.healthexporter
 
 import android.content.Context
-import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import kotlin.coroutines.resume
@@ -15,15 +14,13 @@ class GoogleDriveAccessTokenProvider(context: Context) {
     suspend fun getAccessToken(): String? {
         currentAccessToken?.let { return it }
         return suspendCancellableCoroutine { continuation ->
-            val request = AuthorizationRequest.builder()
-                .setRequestedScopes(scopes)
-                .build()
+            val request = buildDriveAuthorizationRequest()
             client.authorize(request)
                 .addOnSuccessListener { result ->
                     val granted = result.grantedScopes.toSet()
                     val token = result.accessToken
                         ?.takeIf {
-                            DriveAuthorizationScopes.isNarrow(granted) &&
+                            DriveAuthorizationScopes.containsRequired(granted) &&
                                 !result.hasResolution() &&
                                 it.isNotBlank()
                         }

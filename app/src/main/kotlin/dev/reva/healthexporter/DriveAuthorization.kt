@@ -1,11 +1,31 @@
 package dev.reva.healthexporter
 
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.common.api.Scope
+
 object DriveAuthorizationScopes {
     const val DRIVE_FILE = "https://www.googleapis.com/auth/drive.file"
     val requested: Set<String> = setOf(DRIVE_FILE)
 
     fun isNarrow(scopes: Set<String>): Boolean = scopes == requested
+
+    fun containsRequired(scopes: Set<String>): Boolean = DRIVE_FILE in scopes
 }
+
+internal data class DriveAuthorizationRequestPolicy(
+    val requestedScopes: Set<String>,
+    val includePreviouslyGrantedScopes: Boolean,
+)
+
+internal val driveAuthorizationRequestPolicy = DriveAuthorizationRequestPolicy(
+    requestedScopes = DriveAuthorizationScopes.requested,
+    includePreviouslyGrantedScopes = false,
+)
+
+internal fun buildDriveAuthorizationRequest(): AuthorizationRequest = AuthorizationRequest.builder()
+    .setRequestedScopes(driveAuthorizationRequestPolicy.requestedScopes.map(::Scope))
+    .setOptOutIncludingGrantedScopes(!driveAuthorizationRequestPolicy.includePreviouslyGrantedScopes)
+    .build()
 
 internal sealed interface DriveAuthorizationNextStep {
     data object LaunchResolution : DriveAuthorizationNextStep
@@ -16,9 +36,11 @@ internal sealed interface DriveAuthorizationNextStep {
 internal fun decideDriveAuthorizationNextStep(
     hasResolution: Boolean,
     grantedScopes: Set<String>,
+    hasUsableAccessToken: Boolean,
 ): DriveAuthorizationNextStep = when {
     hasResolution -> DriveAuthorizationNextStep.LaunchResolution
-    DriveAuthorizationScopes.isNarrow(grantedScopes) -> DriveAuthorizationNextStep.Authorized
+    DriveAuthorizationScopes.containsRequired(grantedScopes) && hasUsableAccessToken ->
+        DriveAuthorizationNextStep.Authorized
     else -> DriveAuthorizationNextStep.Denied
 }
 

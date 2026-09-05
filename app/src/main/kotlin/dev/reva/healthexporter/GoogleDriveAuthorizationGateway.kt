@@ -5,7 +5,6 @@ import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
-import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.auth.api.identity.RevokeAccessRequest
@@ -27,10 +26,7 @@ class GoogleDriveAuthorizationGateway(
 
     override fun launchAuthorization() {
         check(DriveAuthorizationScopes.isNarrow(scopes.map { it.scopeUri }.toSet()))
-        val request = AuthorizationRequest.builder()
-            .setRequestedScopes(scopes)
-            .setOptOutIncludingGrantedScopes(true)
-            .build()
+        val request = buildDriveAuthorizationRequest()
         client.authorize(request)
             .addOnSuccessListener(::handleResult)
             .addOnFailureListener { onComplete(classifyFailure(it)) }
@@ -63,15 +59,14 @@ class GoogleDriveAuthorizationGateway(
     suspend fun getAccessToken(): String? {
         currentAccessToken?.let { return it }
         return suspendCancellableCoroutine { continuation ->
-            val request = AuthorizationRequest.builder()
-                .setRequestedScopes(scopes)
-                .build()
+            val request = buildDriveAuthorizationRequest()
             client.authorize(request)
                 .addOnSuccessListener { result ->
                     val granted = result.grantedScopes.toSet()
-                    if (DriveAuthorizationScopes.isNarrow(granted) && !result.hasResolution()) {
-                        currentAccessToken = result.accessToken
-                        continuation.resume(result.accessToken)
+                    val token = result.accessToken?.takeIf(String::isNotBlank)
+                    if (DriveAuthorizationScopes.containsRequired(granted) && !result.hasResolution() && token != null) {
+                        currentAccessToken = token
+                        continuation.resume(token)
                     } else {
                         continuation.resume(null)
                     }
@@ -84,7 +79,13 @@ class GoogleDriveAuthorizationGateway(
 
     private fun handleResult(result: AuthorizationResult) {
         val granted = result.grantedScopes.toSet()
-        when (decideDriveAuthorizationNextStep(result.hasResolution(), granted)) {
+        when (
+            decideDriveAuthorizationNextStep(
+                hasResolution = result.hasResolution(),
+                grantedScopes = granted,
+                hasUsableAccessToken = !result.accessToken.isNullOrBlank(),
+            )
+        ) {
             DriveAuthorizationNextStep.LaunchResolution -> {
                 val pendingIntent = result.pendingIntent ?: run {
                     currentAccessToken = null

@@ -119,6 +119,43 @@ class DriveAuthorizationCoordinatorTest {
             decideDriveAuthorizationNextStep(
                 hasResolution = true,
                 grantedScopes = emptySet(),
+                hasUsableAccessToken = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `authorization accepts drive file when previously granted scopes are also returned`() {
+        assertEquals(
+            DriveAuthorizationNextStep.Authorized,
+            decideDriveAuthorizationNextStep(
+                hasResolution = false,
+                grantedScopes = setOf(
+                    DriveAuthorizationScopes.DRIVE_FILE,
+                    "openid",
+                ),
+                hasUsableAccessToken = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `drive authorization requests exclude previously granted scopes`() {
+        assertEquals(
+            setOf(DriveAuthorizationScopes.DRIVE_FILE),
+            driveAuthorizationRequestPolicy.requestedScopes,
+        )
+        assertFalse(driveAuthorizationRequestPolicy.includePreviouslyGrantedScopes)
+    }
+
+    @Test
+    fun `authorization rejects a result without a usable access token`() {
+        assertEquals(
+            DriveAuthorizationNextStep.Denied,
+            decideDriveAuthorizationNextStep(
+                hasResolution = false,
+                grantedScopes = setOf(DriveAuthorizationScopes.DRIVE_FILE),
+                hasUsableAccessToken = false,
             ),
         )
     }
