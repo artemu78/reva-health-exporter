@@ -16,13 +16,9 @@ trap cleanup EXIT
 
 fake_bin="$test_dir/bin"
 command_log="$test_dir/commands.log"
-config_path="$test_dir/local-device.properties"
+device_state_file="$test_dir/device-state"
 download_dir="$test_dir/downloads"
 mkdir -p "$fake_bin" "$download_dir"
-
-cat >"$config_path" <<'EOF'
-ADB_TARGET=192.0.2.10:5555
-EOF
 
 cat >"$fake_bin/git" <<'EOF'
 #!/usr/bin/env bash
@@ -76,23 +72,52 @@ cat >"$fake_bin/adb" <<'EOF'
 set -euo pipefail
 printf 'adb %s\n' "$*" >>"$REVA_TEST_COMMAND_LOG"
 case "$*" in
-    "connect 192.0.2.10:5555") printf 'connected to 192.0.2.10:5555\n' ;;
-    "-s 192.0.2.10:5555 get-state") printf 'device\n' ;;
-    "-s 192.0.2.10:5555 install -r "*)
+    "devices -l")
+        printf 'List of devices attached\n'
+        case "${REVA_TEST_ADB_DEVICES_MODE:-single}" in
+            single)
+                printf '198.51.100.42:40239 device product:lisa_ru model:2109119DG device:lisa transport_id:31\n'
+                printf 'adb-1a1fc0ee-iyHqxS._adb-tls-connect._tcp device product:lisa_ru model:2109119DG device:lisa transport_id:1\n'
+                ;;
+            none)
+                printf '198.51.100.42:40239 offline product:lisa_ru model:2109119DG device:lisa transport_id:31\n'
+                ;;
+            recovery)
+                if [[ -f "$REVA_TEST_ADB_STATE_FILE" ]]; then
+                    printf '198.51.100.42:40239 device product:lisa_ru model:2109119DG device:lisa transport_id:31\n'
+                fi
+                ;;
+            multiple)
+                printf '198.51.100.42:40239 device product:lisa_ru model:2109119DG device:lisa transport_id:31\n'
+                printf '203.0.113.8:45555 device product:other model:other device:other transport_id:32\n'
+                ;;
+        esac
+        ;;
+    "pair 198.51.100.42:37123")
+        read -r pairing_code
+        [[ "$pairing_code" == "123456" ]]
+        printf 'Successfully paired to 198.51.100.42:37123\n'
+        ;;
+    "connect 198.51.100.42:40239")
+        [[ -z "${REVA_TEST_ADB_STATE_FILE:-}" ]] || : >"$REVA_TEST_ADB_STATE_FILE"
+        printf 'already connected to 198.51.100.42:40239\n'
+        ;;
+    "-s 198.51.100.42:40239 get-state") printf 'device\n' ;;
+    "-s 198.51.100.42:40239 install -r "*)
         if [[ "${REVA_TEST_INSTALL_FAIL:-0}" == "1" ]]; then
             printf 'Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE]\n' >&2
             exit 1
         fi
         printf 'Success\n'
         ;;
-    "-s 192.0.2.10:5555 uninstall dev.reva.healthexporter") printf 'Success\n' ;;
-    "-s 192.0.2.10:5555 install "*) printf 'Success\n' ;;
-    "-s 192.0.2.10:5555 shell dumpsys package dev.reva.healthexporter")
+    "-s 198.51.100.42:40239 uninstall dev.reva.healthexporter") printf 'Success\n' ;;
+    "-s 198.51.100.42:40239 install "*) printf 'Success\n' ;;
+    "-s 198.51.100.42:40239 shell dumpsys package dev.reva.healthexporter")
         printf 'versionCode=%s minSdk=30 targetSdk=36\nversionName=%s\n' \
             "$REVA_TEST_VERSION_CODE" "$REVA_TEST_VERSION_NAME"
         ;;
-    "-s 192.0.2.10:5555 shell am force-stop dev.reva.healthexporter") ;;
-    "-s 192.0.2.10:5555 shell am start -W -n dev.reva.healthexporter/.MainActivity")
+    "-s 198.51.100.42:40239 shell am force-stop dev.reva.healthexporter") ;;
+    "-s 198.51.100.42:40239 shell am start -W -n dev.reva.healthexporter/.MainActivity")
         printf 'Status: ok\n'
         ;;
     *) printf 'Unexpected adb command: %s\n' "$*" >&2; exit 64 ;;
@@ -103,7 +128,6 @@ chmod +x "$fake_bin/git" "$fake_bin/gh" "$fake_bin/adb"
 
 output=$(
     PATH="$fake_bin:$PATH" \
-    REVA_RELEASE_CONFIG="$config_path" \
     REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
     REVA_RELEASE_POLL_SECONDS=0 \
     REVA_TEST_COMMAND_LOG="$command_log" \
@@ -113,37 +137,69 @@ output=$(
 grep -Fq "git push origin refs/tags/v${test_version_name}" "$command_log"
 grep -Fq 'gh run watch 24680 --compact --exit-status' "$command_log"
 grep -Fq "gh release download v${test_version_name}" "$command_log"
-grep -Fq 'adb connect 192.0.2.10:5555' "$command_log"
-grep -Fq 'adb -s 192.0.2.10:5555 install -r' "$command_log"
+grep -Fq 'adb devices -l' "$command_log"
+grep -Fq 'adb connect 198.51.100.42:40239' "$command_log"
+grep -Fq 'adb -s 198.51.100.42:40239 install -r' "$command_log"
 grep -Fq "Installed and launched Reva Health Exporter v${test_version_name}" <<<"$output"
 
 echo "release-to-device safe update test passed"
 
-invalid_config_path="$test_dir/invalid-device.properties"
-cat >"$invalid_config_path" <<'EOF'
-ADB_TARGET=999.0.2.10:99999
-EOF
+: >"$command_log"
+rm -f "$device_state_file"
+wireless_recovery_output=$(
+    printf '198.51.100.42:37123\n123456\n198.51.100.42:40239\n' | env \
+        PATH="$fake_bin:$PATH" \
+        REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
+        REVA_TEST_COMMAND_LOG="$command_log" \
+        REVA_TEST_ADB_DEVICES_MODE=recovery \
+        REVA_TEST_ADB_STATE_FILE="$device_state_file" \
+            "$script_under_test" 2>&1
+)
+
+grep -Fq '1. Disconnect VPN on the mobile phone and this laptop.' <<<"$wireless_recovery_output"
+grep -Fq '2. Go to Settings > Wireless debugging.' <<<"$wireless_recovery_output"
+grep -Fq 'adb pair 198.51.100.42:37123' "$command_log"
+grep -Fq 'adb connect 198.51.100.42:40239' "$command_log"
+grep -Fq 'adb -s 198.51.100.42:40239 install -r' "$command_log"
+
+echo "release-to-device wireless connection recovery test passed"
 
 set +e
-invalid_output=$(
+no_device_output=$(
     PATH="$fake_bin:$PATH" \
-    REVA_RELEASE_CONFIG="$invalid_config_path" \
     REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
     REVA_TEST_COMMAND_LOG="$command_log" \
+    REVA_TEST_ADB_DEVICES_MODE=none \
         "$script_under_test" 2>&1
 )
-invalid_status=$?
+no_device_status=$?
 set -e
 
-[[ $invalid_status -ne 0 ]]
-grep -Fq 'ADB_TARGET must contain a valid IPv4 address and port.' <<<"$invalid_output"
+[[ $no_device_status -ne 0 ]]
+grep -Fq 'No online Wi-Fi ADB device with an IP:port endpoint was found.' <<<"$no_device_output"
 
-echo "release-to-device invalid Wi-Fi target test passed"
+echo "release-to-device missing Wi-Fi device test passed"
+
+set +e
+multiple_devices_output=$(
+    PATH="$fake_bin:$PATH" \
+    REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
+    REVA_TEST_COMMAND_LOG="$command_log" \
+    REVA_TEST_ADB_DEVICES_MODE=multiple \
+        "$script_under_test" 2>&1
+)
+multiple_devices_status=$?
+set -e
+
+[[ $multiple_devices_status -ne 0 ]]
+grep -Fq 'Multiple online Wi-Fi ADB devices were found: 198.51.100.42:40239 203.0.113.8:45555 ' \
+    <<<"$multiple_devices_output"
+
+echo "release-to-device multiple Wi-Fi devices test passed"
 
 : >"$command_log"
 recovery_output=$(
     PATH="$fake_bin:$PATH" \
-    REVA_RELEASE_CONFIG="$config_path" \
     REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
     REVA_RELEASE_POLL_SECONDS=0 \
     REVA_TEST_COMMAND_LOG="$command_log" \
@@ -159,7 +215,6 @@ echo "release-to-device interrupted tag push recovery test passed"
 : >"$command_log"
 existing_release_output=$(
     PATH="$fake_bin:$PATH" \
-    REVA_RELEASE_CONFIG="$config_path" \
     REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
     REVA_RELEASE_POLL_SECONDS=0 \
     REVA_TEST_COMMAND_LOG="$command_log" \
@@ -181,7 +236,6 @@ set +e
 cancel_output=$(
     printf 'keep-data\n' | env \
         PATH="$fake_bin:$PATH" \
-        REVA_RELEASE_CONFIG="$config_path" \
         REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
         REVA_RELEASE_POLL_SECONDS=0 \
         REVA_TEST_COMMAND_LOG="$command_log" \
@@ -193,7 +247,7 @@ set -e
 
 [[ $cancel_status -ne 0 ]]
 grep -Fq 'Reinstall cancelled; no app data was erased.' <<<"$cancel_output"
-if grep -Fq 'adb -s 192.0.2.10:5555 uninstall' "$command_log"; then
+if grep -Fq 'adb -s 198.51.100.42:40239 uninstall' "$command_log"; then
     echo "The app was uninstalled without exact reinstall confirmation" >&2
     exit 1
 fi
@@ -204,7 +258,6 @@ echo "release-to-device reinstall cancellation test passed"
 confirm_output=$(
     printf 'reinstall\n' | env \
         PATH="$fake_bin:$PATH" \
-        REVA_RELEASE_CONFIG="$config_path" \
         REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
         REVA_RELEASE_POLL_SECONDS=0 \
         REVA_TEST_COMMAND_LOG="$command_log" \
@@ -212,8 +265,8 @@ confirm_output=$(
             "$script_under_test" 2>&1
 )
 
-grep -Fq 'adb -s 192.0.2.10:5555 uninstall dev.reva.healthexporter' "$command_log"
-grep -Fq 'adb -s 192.0.2.10:5555 install ' "$command_log"
+grep -Fq 'adb -s 198.51.100.42:40239 uninstall dev.reva.healthexporter' "$command_log"
+grep -Fq 'adb -s 198.51.100.42:40239 install ' "$command_log"
 grep -Fq "Installed and launched Reva Health Exporter v${test_version_name}" <<<"$confirm_output"
 
 echo "release-to-device confirmed reinstall test passed"

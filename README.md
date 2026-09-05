@@ -130,17 +130,22 @@ The tag starts the Android Release workflow. It restores the private signing key
 
 After the intended pull request is merged, update local `main` so it exactly matches `origin/main`.
 The release command uses the version already present in `version.properties`; it does not create a
-version commit. Configure the phone once in the ignored `local-device.properties` file:
+version commit. Before running it, pair and connect the phone through Android's Wireless debugging
+screen, then confirm that `adb devices -l` includes one online IPv4 endpoint:
 
-```properties
-ADB_TARGET=192.0.2.10:5555
+```text
+192.0.2.10:40239 device product:example model:example device:example transport_id:1
 ```
 
-Replace the documentation-only address with the phone's Wi-Fi address and ADB port. For the usual
-TCP/IP setup, enable Developer options and USB debugging on the phone, connect it once by USB, run
-`adb tcpip 5555`, note the phone's Wi-Fi IP address, disconnect USB, and keep the Mac and phone on
-the same trusted network. The release command itself never falls back to a USB device; it runs
-`adb connect` for the configured Wi-Fi target.
+The port is assigned dynamically and may change when Wireless debugging restarts. The release
+command reads the current endpoint from `adb devices -l`; it ignores the duplicate mDNS alias and
+never falls back to a USB device. If more than one online IPv4 endpoint is present, disconnect the
+devices not intended for the release before continuing.
+
+If no online IPv4 endpoint is present, the command starts an interactive recovery flow. It asks you
+to disconnect VPN on the phone and laptop, open Wireless debugging, optionally enter the pairing
+IP:port and six-digit code, and finally enter the separate connection IP:port from the main screen.
+After connecting, it reads `adb devices -l` again before continuing.
 
 Then run:
 
@@ -150,7 +155,7 @@ Then run:
 
 The command checks clean synchronized `main`, creates or safely resumes the matching tag, waits for
 the exact GitHub release workflow, downloads the permanently signed APK under `build/releases/`,
-connects to the configured phone, installs the update, verifies its version, and launches the app.
+connects to the discovered phone, installs the update, verifies its version, and launches the app.
 If Android rejects the update, the command explains that a clean reinstall erases local app state.
 It uninstalls only if you type the exact lowercase word `reinstall`; any other response cancels.
 

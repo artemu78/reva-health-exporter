@@ -7,7 +7,6 @@ cd "$project_dir"
 package_name="dev.reva.healthexporter"
 main_activity="$package_name/.MainActivity"
 release_workflow="release.yml"
-config_path=${REVA_RELEASE_CONFIG:-"$project_dir/local-device.properties"}
 download_dir=${REVA_RELEASE_DOWNLOAD_DIR:-"$project_dir/build/releases"}
 poll_seconds=${REVA_RELEASE_POLL_SECONDS:-2}
 max_polls=${REVA_RELEASE_MAX_POLLS:-60}
@@ -61,13 +60,41 @@ find_adb() {
     fail "adb was not found in PATH or the Android SDK."
 }
 
+find_online_wifi_targets() {
+    local adb=$1
+    "$adb" devices -l | awk \
+        '$2 == "device" && $1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+$/ { print $1 }'
+}
+
+run_wireless_connection_workflow() {
+    local adb=$1
+    local pairing_target connection_target
+
+    cat <<'EOF'
+No online Wi-Fi ADB device with an IP:port endpoint was found.
+1. Disconnect VPN on the mobile phone and this laptop.
+2. Go to Settings > Wireless debugging.
+3. Turn Wireless debugging on and keep this screen open.
+4. If this laptop is not already paired, tap "Pair device with pairing code".
+5. Enter that pairing IP:port below; ADB will then ask for the six-digit code.
+6. Return to the main Wireless debugging screen for its separate IP address & Port.
+EOF
+    read -r -p "Pairing IP:port (press Enter if already paired): " pairing_target || \
+        fail "Wireless debugging setup was cancelled."
+    if [[ -n "$pairing_target" ]]; then
+        validate_adb_target "$pairing_target" || fail "Pairing target must contain a valid IPv4 address and port."
+        "$adb" pair "$pairing_target" || fail "ADB pairing failed."
+    fi
+
+    read -r -p "IP address & Port from the main Wireless debugging screen: " connection_target || \
+        fail "Wireless debugging setup was cancelled."
+    validate_adb_target "$connection_target" || \
+        fail "Connection target must contain a valid IPv4 address and port."
+    "$adb" connect "$connection_target" || fail "ADB connection failed."
+}
+
 require_command git
 require_command gh
-
-[[ -f "$config_path" ]] || fail "Create $config_path with ADB_TARGET=<phone-ip>:<port>."
-adb_target=$(read_property ADB_TARGET "$config_path")
-validate_adb_target "$adb_target" || \
-    fail "ADB_TARGET must contain a valid IPv4 address and port."
 
 version_name=$(read_property VERSION_NAME "$project_dir/version.properties")
 version_code=$(read_property VERSION_CODE "$project_dir/version.properties")
@@ -150,10 +177,23 @@ gh release download "$release_tag" \
 [[ -f "$apk_path" ]] || fail "GitHub Release did not contain $apk_name."
 
 adb=$(find_adb)
+adb_targets=$(find_online_wifi_targets "$adb")
+adb_target_count=$(awk 'NF { count++ } END { print count + 0 }' <<<"$adb_targets")
+if ((adb_target_count == 0)); then
+    run_wireless_connection_workflow "$adb"
+    adb_targets=$(find_online_wifi_targets "$adb")
+    adb_target_count=$(awk 'NF { count++ } END { print count + 0 }' <<<"$adb_targets")
+    ((adb_target_count > 0)) || \
+        fail "The phone still does not appear as an online IP:port device in 'adb devices -l'."
+fi
+if ((adb_target_count > 1)); then
+    fail "Multiple online Wi-Fi ADB devices were found: $(tr '\n' ' ' <<<"$adb_targets"). Disconnect the devices not intended for this release."
+fi
+adb_target=$(sed -n '1p' <<<"$adb_targets")
 echo "Connecting to $adb_target over Wi-Fi."
 "$adb" connect "$adb_target"
 [[ $("$adb" -s "$adb_target" get-state) == "device" ]] || \
-    fail "The configured Wi-Fi ADB target is not ready."
+    fail "The discovered Wi-Fi ADB target is not ready."
 
 set +e
 install_output=$("$adb" -s "$adb_target" install -r "$apk_path" 2>&1)
