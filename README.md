@@ -19,7 +19,7 @@ export only the records that Health Connect actually makes available.
 
 ## Intended export flow
 
-The first remote destination will be a visible folder in the user's own Google Drive. Exports will use versioned, compressed, immutable batches designed for safe retries. A configurable HTTPS destination may be added later if server-side processing becomes necessary.
+The first remote destination is a visible folder in the user's own Google Drive. Exports are mutable, versioned JSON snapshots: exactly one `YYYY-MM-DD.json` file represents each local calendar date and is replaced on refresh. A configurable HTTPS destination may be added later if server-side processing becomes necessary.
 
 ## Privacy
 
@@ -65,7 +65,7 @@ clear the app's storage or uninstall it. Keep any exported copies you still need
 ## Export history and manual backfill
 
 The **Export history** section shows the latest 14 local calendar days using the phone's current
-timezone. **Uploaded** means confirmed app-created Google Drive batch intervals cover the whole
+timezone. **Uploaded** means a confirmed app-created Google Drive daily snapshot covers the whole
 day; **Partially uploaded** means only part is covered; **Not uploaded** means a successful Drive
 refresh found no coverage; and **Pending / retrying** means a stable local batch still needs durable
 confirmation. **Unknown** is deliberately different from missing: it appears while Drive is

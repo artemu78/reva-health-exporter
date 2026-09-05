@@ -64,7 +64,9 @@ class LocalFileDestination(
 
     override suspend fun upload(batch: ExportBatch): UploadResult {
         val targetDir = if (useHierarchy) {
-            val startUtc = batch.header.timeWindow.startInclusive.atZone(ZoneOffset.UTC)
+            val startUtc = batch.header.timeWindow.startInclusive.atZone(
+                batch.header.exportTimezone?.let(java.time.ZoneId::of) ?: ZoneOffset.UTC,
+            )
             val year = startUtc.year.toString()
             val month = String.format(Locale.ROOT, "%02d", startUtc.monthValue)
             File(baseDirectory, "$year/$month")
@@ -79,7 +81,7 @@ class LocalFileDestination(
             )
         }
 
-        val filename = formatBatchFilename(batch.header)
+        val filename = formatSnapshotFilename(batch.header)
         val targetFile = File(targetDir, filename)
         val tempFile = File(targetDir, "$filename.tmp.${UUID.randomUUID()}")
 
@@ -133,5 +135,8 @@ class LocalFileDestination(
             val endStr = TIMESTAMP_FORMATTER.format(header.timeWindow.endExclusive)
             return "$startStr--$endStr--${header.batchId}.json"
         }
+
+        fun formatSnapshotFilename(header: BatchHeader): String =
+            header.exportDate?.let { "$it.json" } ?: formatBatchFilename(header)
     }
 }
