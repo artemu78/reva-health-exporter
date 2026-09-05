@@ -123,7 +123,7 @@ sequenceDiagram
     Worker->>State: Advance checkpoint and record result
 ```
 
-The checkpoint advances only after the destination confirms success. Retries reuse the same batch identity so an uncertain network result does not create uncontrolled duplicates.
+The checkpoint advances only after the destination confirms success. Daily snapshots use an identity derived from destination, account, persisted timezone, and local date, so retries and refreshes update the same Drive file rather than creating duplicates.
 
 ## Export destination contract
 
@@ -144,7 +144,7 @@ Initial implementations:
 
 ## Google Drive layout
 
-Use a visible app-created folder and the narrow `drive.file` OAuth scope. Do not use the hidden Drive application-data folder for health exports because users and other tools must be able to inspect and copy their data.
+Use a visible app-created folder and the narrow `drive.file` OAuth scope. Files are named `YYYY-MM-DD.json` and are mutable snapshots; consumers replace rows from a changed daily identity. Do not use the hidden Drive application-data folder for health exports because users and other tools must be able to inspect and copy their data.
 
 Suggested layout:
 
