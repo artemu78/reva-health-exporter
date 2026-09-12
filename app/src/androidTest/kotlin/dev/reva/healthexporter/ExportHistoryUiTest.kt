@@ -139,8 +139,14 @@ class ExportHistoryUiTest {
                 }
                 instrumentation.waitForIdleSync()
                 val expected = instrumentation.targetContext.getString(R.string.drive_export_status_nothing)
-                assertTrue(instrumentation.uiAutomation.rootInActiveWindow
-                    .findAccessibilityNodeInfosByText(expected).isNotEmpty())
+                val deadline = android.os.SystemClock.uptimeMillis() + 5_000
+                var summaryVisible = false
+                while (!summaryVisible && android.os.SystemClock.uptimeMillis() < deadline) {
+                    summaryVisible = instrumentation.uiAutomation.rootInActiveWindow
+                        ?.findAccessibilityNodeInfosByText(expected)?.isNotEmpty() == true
+                    if (!summaryVisible) android.os.SystemClock.sleep(50)
+                }
+                assertTrue("Audit dialog should display the stored export summary", summaryVisible)
             }
         } finally {
             store.clear()
