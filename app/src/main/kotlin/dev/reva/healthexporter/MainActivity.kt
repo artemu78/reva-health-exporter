@@ -387,27 +387,30 @@ class MainActivity : ComponentActivity() {
         findViewById<TextView>(R.id.export_history_status).text = getString(R.string.export_history_uploading)
         findViewById<TextView>(R.id.drive_export_status).text = getString(R.string.export_history_uploading)
         lifecycleScope.launch {
-            val result = ManualBackfillCoordinator(
-                exportStateStore,
-                exportHistoryStore,
-                HealthConnectExportReader(client),
-                GoogleDriveDestination(googleDriveGatewayFactory(this@MainActivity, auth.accountId)),
-                key,
-                pendingStore = SharedPreferencesManualBackfillPendingStore(this@MainActivity),
-            ).uploadDays(dates, ZoneId.systemDefault()) { date, uploaded ->
-                if (uploaded) exportHistoryPresenter.markDateUploaded(date)
+            try {
+                val result = ManualBackfillCoordinator(
+                    exportStateStore,
+                    exportHistoryStore,
+                    HealthConnectExportReader(client),
+                    GoogleDriveDestination(googleDriveGatewayFactory(this@MainActivity, auth.accountId)),
+                    key,
+                    pendingStore = SharedPreferencesManualBackfillPendingStore(this@MainActivity),
+                ).uploadDays(dates, ZoneId.systemDefault()) { date, uploaded ->
+                    if (uploaded) exportHistoryPresenter.markDateUploaded(date)
+                    renderExportHistory()
+                }
+                findViewById<TextView>(R.id.export_history_status).text = when (result) {
+                    is ManualBackfillResult.Success -> getString(R.string.drive_export_status_success, result.confirmed.last().batchId, result.confirmed.size)
+                    is ManualBackfillResult.NoRecordsFound -> getString(R.string.export_history_no_records)
+                    is ManualBackfillResult.Retrying -> result.message
+                    is ManualBackfillResult.Failure -> result.message
+                }
+                findViewById<TextView>(R.id.drive_export_status).text = findViewById<TextView>(R.id.export_history_status).text
+                refreshExportHistory()
+            } finally {
+                exportHistoryPresenter.finishUpload()
                 renderExportHistory()
             }
-            findViewById<TextView>(R.id.export_history_status).text = when (result) {
-                is ManualBackfillResult.Success -> getString(R.string.drive_export_status_success, result.confirmed.last().batchId, result.confirmed.size)
-                is ManualBackfillResult.NoRecordsFound -> getString(R.string.export_history_no_records)
-                is ManualBackfillResult.Retrying -> result.message
-                is ManualBackfillResult.Failure -> result.message
-            }
-            exportHistoryPresenter.finishUpload()
-            findViewById<TextView>(R.id.drive_export_status).text = findViewById<TextView>(R.id.export_history_status).text
-            renderExportHistory()
-            refreshExportHistory()
         }
     }
 
