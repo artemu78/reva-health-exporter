@@ -41,7 +41,7 @@ class DriveAuthorizationUiTest {
             scenario.onActivity { activity ->
                 assertEquals(0, gateway.launches)
                 assertEquals(
-                    "",
+                    activity.getString(R.string.drive_disconnected),
                     activity.findViewById<TextView>(R.id.drive_authorization_status).text.toString(),
                 )
 
@@ -100,7 +100,7 @@ class DriveAuthorizationUiTest {
                     activity.findViewById<Button>(R.id.drive_export_now).visibility,
                 )
                 assertEquals(
-                    "",
+                    activity.getString(R.string.drive_disconnected),
                     activity.findViewById<TextView>(R.id.drive_authorization_status).text.toString(),
                 )
                 assertEquals(
@@ -134,7 +134,7 @@ class DriveAuthorizationUiTest {
                 activity.findViewById<Button>(R.id.drive_disconnect).performClick()
 
                 assertEquals(
-                    "",
+                    activity.getString(R.string.drive_disconnected),
                     activity.findViewById<TextView>(R.id.drive_authorization_status).text.toString(),
                 )
                 assertEquals(

@@ -1,300 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:padding="24dp">
-
-        <TextView
-            android:id="@+id/first_screen_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:accessibilityHeading="true"
-            android:gravity="center"
-            android:text="@string/first_screen_title"
-            android:textAppearance="@android:style/TextAppearance.Material.Headline" />
-
-        <TextView
-            android:id="@+id/health_connect_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:textAppearance="@android:style/TextAppearance.Material.Body1" />
-
-        <TextView
-            android:id="@+id/granted_permissions"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/missing_permissions"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:visibility="gone" />
-
-        <Button
-            android:id="@+id/health_connect_action"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:visibility="gone" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="24dp"
-            android:background="#33000000"
-            android:importantForAccessibility="no" />
-
-        <TextView
-            android:id="@+id/drive_authorization_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:accessibilityHeading="true"
-            android:text="@string/drive_authorization_title"
-            android:textAppearance="@android:style/TextAppearance.Material.Title" />
-
-        <TextView
-            android:id="@+id/drive_authorization_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:accessibilityLiveRegion="polite"
-            android:text="@string/drive_disconnected" />
-
-        <Button
-            android:id="@+id/drive_connect"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/drive_connect" />
-
-        <Button
-            android:id="@+id/drive_reconnect"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/drive_reconnect"
-            android:visibility="gone" />
-
-        <Button
-            android:id="@+id/drive_disconnect"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/drive_disconnect"
-            android:visibility="gone" />
-
-        <Button
-            android:id="@+id/drive_export_now"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:contentDescription="@string/drive_export_now_description"
-            android:text="@string/drive_export_now"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/drive_export_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:accessibilityLiveRegion="polite" />
-
-        <TextView
-            android:id="@+id/export_history_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:accessibilityHeading="true"
-            android:text="@string/export_history_title"
-            android:textAppearance="@android:style/TextAppearance.Material.Title" />
-
-        <TextView
-            android:id="@+id/export_history_timezone"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" />
-
-        <Button
-            android:id="@+id/export_history_refresh"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/export_history_refresh" />
-
-        <LinearLayout
-            android:id="@+id/export_history_rows"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="vertical" />
-
-        <Button
-            android:id="@+id/export_history_load_more"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/export_history_load_more" />
-
-        <Button
-            android:id="@+id/export_history_upload_selected"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:enabled="false"
-            android:text="@string/export_history_upload_selected" />
-
-        <TextView
-            android:id="@+id/export_history_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:accessibilityLiveRegion="polite" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="24dp"
-            android:background="#33000000"
-            android:importantForAccessibility="no" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:accessibilityHeading="true"
-            android:text="@string/diagnostic_results_title"
-            android:textAppearance="@android:style/TextAppearance.Material.Title" />
-
-        <RadioGroup
-            android:id="@+id/diagnostic_time_window"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:contentDescription="@string/diagnostic_time_window_description"
-            android:orientation="horizontal">
-
-            <RadioButton
-                android:id="@+id/window_twenty_four_hours"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="true"
-                android:contentDescription="@string/window_twenty_four_hours_description"
-                android:text="@string/window_twenty_four_hours" />
-
-            <RadioButton
-                android:id="@+id/window_seven_days"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="@string/window_seven_days_description"
-                android:text="@string/window_seven_days" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="#F2FBFB">
+  <LinearLayout android:layout_width="match_parent" android:layout_height="56dp" android:gravity="center_vertical" android:paddingHorizontal="16dp">
+    <ImageView android:layout_width="32dp" android:layout_height="32dp" android:src="@mipmap/ic_launcher" android:importantForAccessibility="no" />
+    <TextView android:id="@+id/first_screen_title" android:layout_width="0dp" android:layout_height="wrap_content" android:accessibilityHeading="true" android:gravity="start" android:text="@string/first_screen_title" android:textAppearance="@android:style/TextAppearance.Material.Headline" android:layout_marginTop="4dp" android:layout_weight="1" android:textSize="16sp" android:paddingStart="8dp" />
+    <Button android:id="@+id/matrix_settings" android:layout_width="40dp" android:layout_height="48dp" android:text="⚙" android:textSize="12sp" android:textAllCaps="false" android:textColor="#005152" android:backgroundTint="#F2FBFB" android:contentDescription="Settings" android:minWidth="0dp" android:padding="0dp" android:stateListAnimator="@null" android:elevation="0dp" android:paddingHorizontal="8dp" android:background="@drawable/matrix_cell" />
+    <Button android:id="@+id/matrix_account" android:layout_width="40dp" android:layout_height="48dp" android:text="●" android:textSize="12sp" android:textAllCaps="false" android:textColor="#005152" android:backgroundTint="#CCE8E7" android:contentDescription="Google Drive account" android:minWidth="0dp" android:padding="0dp" android:stateListAnimator="@null" android:elevation="0dp" android:paddingHorizontal="8dp" android:background="@drawable/matrix_cell" />
+  </LinearLayout>
+  <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:id="@+id/matrix_records">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/matrix_card" android:padding="12dp" android:layout_marginBottom="12dp">
+          <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Data Pipelines" android:textSize="14sp" android:textColor="#151D1D" android:textStyle="bold" />
+          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/matrix_cell" android:padding="10dp" android:layout_marginTop="8dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Health Connect" android:textSize="14sp" android:textColor="#151D1D" android:textStyle="bold" />
+            <TextView android:id="@+id/health_connect_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textAppearance="@android:style/TextAppearance.Material.Body1" android:textSize="13sp" android:textColor="#3E4949" />
+            <Button android:id="@+id/health_connect_action" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:visibility="gone" android:stateListAnimator="@null" android:elevation="0dp" android:textAllCaps="false" android:paddingHorizontal="8dp" android:textSize="12sp" android:background="@drawable/matrix_cell" android:backgroundTint="#CCE8E7" />
+          </LinearLayout>
+          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/matrix_cell" android:padding="10dp" android:layout_marginTop="8dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Google Drive" android:textSize="14sp" android:textColor="#151D1D" android:textStyle="bold" />
+            <TextView android:id="@+id/drive_authorization_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:accessibilityLiveRegion="polite" android:text="@string/drive_disconnected" android:textSize="13sp" android:textColor="#3E4949" />
+            <Button android:id="@+id/drive_connect" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/drive_connect" android:stateListAnimator="@null" android:elevation="0dp" android:textAllCaps="false" android:paddingHorizontal="8dp" android:textSize="12sp" android:background="@drawable/matrix_cell" android:backgroundTint="#CCE8E7" />
+          </LinearLayout>
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/matrix_card" android:padding="12dp" android:layout_marginBottom="12dp">
+          <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="EXPORT STATUS" android:textSize="10sp" android:textColor="#151D1D" />
+          <TextView android:id="@+id/drive_export_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:accessibilityLiveRegion="polite" android:textSize="13sp" android:textColor="#3E4949" android:hint="No upload recorded." android:textColorHint="#3E4949" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/matrix_card" android:padding="12dp" android:layout_marginBottom="12dp">
+          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:text="" android:textSize="16sp" android:textColor="#151D1D" android:id="@+id/matrix_range" android:textStyle="bold" android:layout_weight="1" />
+            <Button android:id="@+id/matrix_previous" android:layout_width="32dp" android:layout_height="48dp" android:text="‹" android:textSize="12sp" android:textAllCaps="false" android:textColor="#005152" android:backgroundTint="#CCE8E7" android:minWidth="0dp" android:stateListAnimator="@null" android:elevation="0dp" android:paddingHorizontal="8dp" android:background="@drawable/matrix_cell" />
+            <Button android:id="@+id/matrix_today" android:layout_width="56dp" android:layout_height="48dp" android:text="Today" android:textSize="12sp" android:textAllCaps="false" android:textColor="#005152" android:backgroundTint="#CCE8E7" android:minWidth="0dp" android:stateListAnimator="@null" android:elevation="0dp" android:paddingHorizontal="8dp" android:background="@drawable/matrix_cell" />
+            <Button android:id="@+id/matrix_next" android:layout_width="32dp" android:layout_height="48dp" android:text="›" android:textSize="12sp" android:textAllCaps="false" android:textColor="#005152" android:backgroundTint="#CCE8E7" android:minWidth="0dp" android:stateListAnimator="@null" android:elevation="0dp" android:paddingHorizontal="8dp" android:background="@drawable/matrix_cell" />
+          </LinearLayout>
+          <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Reviewing 35-day backup trail" android:textSize="11sp" android:textColor="#151D1D" />
+          <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:text="Mon" android:textSize="10sp" android:textColor="#151D1D" android:gravity="center" android:layout_weight="1" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:text="Tue" android:textSize="10sp" android:textColor="#151D1D" android:gravity="center" android:layout_weight="1" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:text="Wed" android:textSize="10sp" android:textColor="#151D1D" android:gravity="center" android:layout_weight="1" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:text="Thu" android:textSize="10sp" android:textColor="#151D1D" android:gravity="center" android:layout_weight="1" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:text="Fri" android:textSize="10sp" android:textColor="#151D1D" android:gravity="center" android:layout_weight="1" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:text="Sat" android:textSize="10sp" android:textColor="#151D1D" android:gravity="center" android:layout_weight="1" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:text="Sun" android:textSize="10sp" android:textColor="#151D1D" android:gravity="center" android:layout_weight="1" />
+          </LinearLayout>
+          <LinearLayout android:id="@+id/export_history_rows" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:orientation="vertical" />
+          <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="✓ Uploaded                 ↻ Pending upload&#10;! Not uploaded            ◐ Partially uploaded&#10;? Unknown" android:textSize="11sp" android:textColor="#151D1D" android:paddingTop="12dp" />
+          <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tap a date to select it for upload." android:textSize="12sp" android:textColor="#151D1D" android:paddingTop="8dp" />
+          <TextView android:id="@+id/export_history_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:accessibilityLiveRegion="polite" />
+        </LinearLayout>
+      </LinearLayout>
+      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:id="@+id/matrix_vaults" android:visibility="gone">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Google Drive" android:textSize="20sp" android:textColor="#151D1D" android:textStyle="bold" />
+        <Button android:id="@+id/drive_reconnect" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/drive_reconnect" android:visibility="gone" android:stateListAnimator="@null" android:elevation="0dp" android:textAllCaps="false" android:paddingHorizontal="8dp" android:textSize="12sp" android:background="@drawable/matrix_cell" android:backgroundTint="#CCE8E7" />
+        <Button android:id="@+id/drive_disconnect" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/drive_disconnect" android:visibility="gone" android:stateListAnimator="@null" android:elevation="0dp" android:textAllCaps="false" android:paddingHorizontal="8dp" android:textSize="12sp" android:background="@drawable/matrix_cell" android:backgroundTint="#CCE8E7" />
+        <Button android:id="@+id/drive_export_now" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:contentDescription="@string/drive_export_now_description" android:text="@string/drive_export_now" android:visibility="gone" android:stateListAnimator="@null" android:elevation="0dp" android:textAllCaps="false" android:paddingHorizontal="8dp" android:textSize="12sp" android:background="@drawable/matrix_cell" android:backgroundTint="#CCE8E7" />
+        <Button android:id="@+id/export_history_refresh" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/export_history_refresh" android:stateListAnimator="@null" android:elevation="0dp" android:textAllCaps="false" android:paddingHorizontal="8dp" android:textSize="12sp" android:background="@drawable/matrix_cell" android:backgroundTint="#CCE8E7" />
+      </LinearLayout>
+      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:id="@+id/matrix_preferences" android:visibility="gone">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Settings &amp; diagnostics" android:textSize="20sp" android:textColor="#151D1D" android:textStyle="bold" />
+        <TextView android:id="@+id/granted_permissions" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:visibility="gone" />
+        <TextView android:id="@+id/missing_permissions" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:visibility="gone" />
+        <RadioGroup android:id="@+id/diagnostic_time_window" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:contentDescription="@string/diagnostic_time_window_description" android:orientation="horizontal">
+          <RadioButton android:id="@+id/window_twenty_four_hours" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true" android:contentDescription="@string/window_twenty_four_hours_description" android:text="@string/window_twenty_four_hours" />
+          <RadioButton android:id="@+id/window_seven_days" android:layout_width="wrap_content" android:layout_height="wrap_content" android:contentDescription="@string/window_seven_days_description" android:text="@string/window_seven_days" />
         </RadioGroup>
-
-        <Button
-            android:id="@+id/diagnostic_refresh"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:contentDescription="@string/diagnostic_refresh_description"
-            android:text="@string/diagnostic_refresh" />
-
-        <Button
-            android:id="@+id/diagnostic_export"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:contentDescription="@string/diagnostic_export_description"
-            android:enabled="false"
-            android:text="@string/diagnostic_export" />
-
-        <TextView
-            android:id="@+id/diagnostic_export_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:accessibilityLiveRegion="polite" />
-
-        <ProgressBar
-            android:id="@+id/diagnostic_progress"
-            style="?android:attr/progressBarStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:contentDescription="@string/diagnostic_loading_description" />
-
-        <TextView
-            android:id="@+id/diagnostic_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:accessibilityLiveRegion="polite"
-            android:text="@string/diagnostic_preparing"
-            android:textAppearance="@android:style/TextAppearance.Material.Body1" />
-
-        <LinearLayout
-            android:id="@+id/diagnostic_results"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="vertical" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="24dp"
-            android:background="#33000000"
-            android:importantForAccessibility="no" />
-
-        <TextView
-            android:id="@+id/background_read_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:accessibilityHeading="true"
-            android:text="@string/background_read_title"
-            android:textAppearance="@android:style/TextAppearance.Material.Title" />
-
-        <TextView
-            android:id="@+id/background_read_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/background_probe_no_run"
-            android:textAppearance="@android:style/TextAppearance.Material.Body1" />
-
-        <Button
-            android:id="@+id/background_probe_trigger"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:contentDescription="@string/background_probe_trigger_description"
-            android:text="@string/background_probe_trigger" />
-
-        <TextView
-            android:id="@+id/background_probe_result"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:accessibilityLiveRegion="polite"
-            android:textAppearance="@android:style/TextAppearance.Material.Body2" />
-
-        <TextView
-            android:id="@+id/app_version"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:gravity="center"
-            android:textAppearance="@android:style/TextAppearance.Material.Caption" />
+        <Button android:id="@+id/diagnostic_refresh" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:contentDescription="@string/diagnostic_refresh_description" android:text="@string/diagnostic_refresh" android:stateListAnimator="@null" android:elevation="0dp" android:textAllCaps="false" android:paddingHorizontal="8dp" android:textSize="12sp" android:background="@drawable/matrix_cell" android:backgroundTint="#CCE8E7" />
+        <Button android:id="@+id/diagnostic_export" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:contentDescription="@string/diagnostic_export_description" android:enabled="false" android:text="@string/diagnostic_export" android:stateListAnimator="@null" android:elevation="0dp" android:textAllCaps="false" android:paddingHorizontal="8dp" android:textSize="12sp" android:background="@drawable/matrix_cell" android:backgroundTint="#CCE8E7" />
+        <TextView android:id="@+id/diagnostic_export_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:accessibilityLiveRegion="polite" />
+        <ProgressBar android:id="@+id/diagnostic_progress" style="?android:attr/progressBarStyle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:contentDescription="@string/diagnostic_loading_description" />
+        <TextView android:id="@+id/diagnostic_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:accessibilityLiveRegion="polite" android:text="@string/diagnostic_preparing" android:textAppearance="@android:style/TextAppearance.Material.Body1" />
+        <LinearLayout android:id="@+id/diagnostic_results" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:orientation="vertical" />
+        <TextView android:id="@+id/background_read_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:accessibilityHeading="true" android:text="@string/background_read_title" android:textAppearance="@android:style/TextAppearance.Material.Title" />
+        <TextView android:id="@+id/background_read_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/background_probe_no_run" android:textAppearance="@android:style/TextAppearance.Material.Body1" />
+        <Button android:id="@+id/background_probe_trigger" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:contentDescription="@string/background_probe_trigger_description" android:text="@string/background_probe_trigger" android:stateListAnimator="@null" android:elevation="0dp" android:textAllCaps="false" android:paddingHorizontal="8dp" android:textSize="12sp" android:background="@drawable/matrix_cell" android:backgroundTint="#CCE8E7" />
+        <TextView android:id="@+id/background_probe_result" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:accessibilityLiveRegion="polite" android:textAppearance="@android:style/TextAppearance.Material.Body2" />
+        <TextView android:id="@+id/app_version" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:gravity="center" android:textAppearance="@android:style/TextAppearance.Material.Caption" />
+      </LinearLayout>
     </LinearLayout>
-</ScrollView>
+  </ScrollView>
+  <LinearLayout android:id="@+id/matrix_selection" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginHorizontal="16dp" android:padding="8dp" android:gravity="center_vertical" android:background="@drawable/matrix_cell" android:visibility="gone">
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:text="" android:textSize="14sp" android:textColor="#151D1D" android:id="@+id/matrix_selection_count" android:layout_weight="1" />
+    <Button android:id="@+id/matrix_clear" android:layout_width="wrap_content" android:layout_height="48dp" android:text="×" android:textSize="12sp" android:textAllCaps="false" android:textColor="#005152" android:backgroundTint="#CCE8E7" android:contentDescription="Cancel selection" android:minWidth="40dp" android:stateListAnimator="@null" android:elevation="0dp" android:paddingHorizontal="8dp" android:background="@drawable/matrix_cell" />
+    <Button android:id="@+id/export_history_upload_selected" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:enabled="false" android:text="Upload selected" android:textAllCaps="false" android:textSize="12sp" android:backgroundTint="#005152" android:textColor="#FFFFFF" android:stateListAnimator="@null" android:elevation="0dp" android:paddingHorizontal="8dp" android:background="@drawable/matrix_cell" />
+  </LinearLayout>
+  <LinearLayout android:layout_width="match_parent" android:layout_height="64dp" android:gravity="center">
+    <Button android:id="@+id/matrix_nav_records" android:layout_width="0dp" android:layout_height="64dp" android:text="▦&#10;Records" android:textSize="10sp" android:textAllCaps="false" android:textColor="#005152" android:backgroundTint="#F2FBFB" android:layout_weight="1" android:stateListAnimator="@null" android:elevation="0dp" android:paddingHorizontal="8dp" android:background="@drawable/matrix_cell" />
+    <Button android:id="@+id/matrix_nav_vaults" android:layout_width="0dp" android:layout_height="64dp" android:text="♧&#10;Vaults" android:textSize="10sp" android:textAllCaps="false" android:textColor="#005152" android:backgroundTint="#F2FBFB" android:layout_weight="1" android:stateListAnimator="@null" android:elevation="0dp" android:paddingHorizontal="8dp" android:background="@drawable/matrix_cell" />
+    <Button android:id="@+id/matrix_nav_audit" android:layout_width="0dp" android:layout_height="64dp" android:text="≡&#10;Audit Log" android:textSize="10sp" android:textAllCaps="false" android:textColor="#005152" android:backgroundTint="#F2FBFB" android:layout_weight="1" android:stateListAnimator="@null" android:elevation="0dp" android:paddingHorizontal="8dp" android:background="@drawable/matrix_cell" />
+    <Button android:id="@+id/matrix_nav_settings" android:layout_width="0dp" android:layout_height="64dp" android:text="☷&#10;Settings" android:textSize="10sp" android:textAllCaps="false" android:textColor="#005152" android:backgroundTint="#F2FBFB" android:layout_weight="1" android:stateListAnimator="@null" android:elevation="0dp" android:paddingHorizontal="8dp" android:background="@drawable/matrix_cell" />
+  </LinearLayout>
+</LinearLayout>

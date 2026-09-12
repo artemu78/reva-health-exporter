@@ -2,7 +2,7 @@ package dev.reva.healthexporter
 
 import android.view.View
 import android.widget.Button
-import android.widget.CheckBox
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
@@ -24,60 +24,89 @@ class ExportHistoryUiTest {
     }
 
     @Test
-    fun disconnectedHistoryShowsBoundedUnknownDaysAndTimezone() {
+    fun matrixShowsFiveWeeksAndClearsSelectionWithoutEnablingDisconnectedUpload() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 val rows = activity.findViewById<LinearLayout>(R.id.export_history_rows)
-                assertEquals(14, rows.childCount)
-                val first = rows.getChildAt(0) as CheckBox
-                assertTrue(first.text.toString().contains("Unknown"))
-                assertTrue(first.isEnabled)
-                assertEquals(
-                    activity.getString(R.string.export_history_load_more),
-                    activity.findViewById<Button>(R.id.export_history_load_more).text.toString(),
-                )
-                activity.findViewById<Button>(R.id.export_history_load_more).performClick()
-                assertEquals(24, rows.childCount)
+                assertEquals(5, rows.childCount)
+                val firstWeek = rows.getChildAt(0) as ViewGroup
+                assertEquals(7, firstWeek.childCount)
+                val first = firstWeek.getChildAt(0)
+                assertTrue(first.contentDescription.contains("Unknown"))
+                first.performClick()
+                assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.matrix_selection).visibility)
                 assertFalse(activity.findViewById<Button>(R.id.export_history_upload_selected).isEnabled)
-                assertTrue(activity.findViewById<TextView>(R.id.export_history_timezone).text.toString().startsWith("Calendar timezone:"))
-                assertEquals(View.VISIBLE, activity.findViewById<TextView>(R.id.export_history_title).visibility)
+                activity.findViewById<View>(R.id.matrix_clear).performClick()
+                assertEquals(View.GONE, activity.findViewById<View>(R.id.matrix_selection).visibility)
+                assertFalse(activity.findViewById<View>(R.id.diagnostic_refresh).isShown)
+                assertFalse(activity.findViewById<View>(R.id.drive_export_now).isShown)
+                activity.findViewById<View>(R.id.matrix_nav_settings).performClick()
+                assertTrue(activity.findViewById<View>(R.id.matrix_preferences).isShown)
+                assertFalse(activity.findViewById<View>(R.id.matrix_records).isShown)
             }
         }
     }
 
     @Test
-    fun driveHistoryRefreshPreservesTheExpandedVisibleDateCount() {
-        MainActivity.driveAuthorizationGatewayFactory = { _, complete ->
-            object : DriveAuthorizationGateway {
-                override fun launchAuthorization() {
-                    complete(DriveAuthorizationResult.Authorized("synthetic-account"))
-                }
-
-                override fun disconnect(onComplete: (DriveDisconnectionResult) -> Unit) {
-                    onComplete(DriveDisconnectionResult.Disconnected)
+    fun navigationReturnsToTodayAndDisablesFutureDates() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val range = activity.findViewById<TextView>(R.id.matrix_range).text.toString()
+                assertFalse(activity.findViewById<View>(R.id.matrix_next).isEnabled)
+                activity.findViewById<View>(R.id.matrix_previous).performClick()
+                assertTrue(activity.findViewById<View>(R.id.matrix_next).isEnabled)
+                activity.findViewById<View>(R.id.matrix_today).performClick()
+                assertEquals(range, activity.findViewById<TextView>(R.id.matrix_range).text.toString())
+                val rows = activity.findViewById<LinearLayout>(R.id.export_history_rows)
+                val today = java.time.LocalDate.now()
+                uploadMatrixDates(today, 0).forEachIndexed { index, date ->
+                    val cell = (rows.getChildAt(index / 7) as ViewGroup).getChildAt(index % 7)
+                    assertEquals(date <= today, cell.isEnabled)
                 }
             }
         }
-        MainActivity.googleDriveGatewayFactory = { _, accountId -> EmptyGoogleDriveGateway(accountId) }
+    }
 
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            scenario.onActivity { activity ->
-                activity.findViewById<Button>(R.id.drive_connect).performClick()
+    @Test
+    fun driveHistoryRefreshPreservesTheNavigatedWindow() {
+        MainActivity.driveAuthorizationGatewayFactory = { _, complete ->
+            object : DriveAuthorizationGateway {
+                override fun launchAuthorization() { complete(DriveAuthorizationResult.Authorized("synthetic-account")) }
+                override fun disconnect(onComplete: (DriveDisconnectionResult) -> Unit) { onComplete(DriveDisconnectionResult.Disconnected) }
             }
+        }
+        MainActivity.googleDriveGatewayFactory = { _, accountId -> EmptyGoogleDriveGateway(accountId) }
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { it.findViewById<Button>(R.id.drive_connect).performClick() }
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-
+            var range = ""
             scenario.onActivity { activity ->
-                val rows = activity.findViewById<LinearLayout>(R.id.export_history_rows)
-                activity.findViewById<Button>(R.id.export_history_load_more).performClick()
-                assertEquals(24, rows.childCount)
-
+                activity.findViewById<View>(R.id.matrix_previous).performClick()
+                range = activity.findViewById<TextView>(R.id.matrix_range).text.toString()
                 activity.findViewById<Button>(R.id.export_history_refresh).performClick()
             }
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-
             scenario.onActivity { activity ->
+                assertEquals(range, activity.findViewById<TextView>(R.id.matrix_range).text.toString())
+                assertEquals(5, activity.findViewById<LinearLayout>(R.id.export_history_rows).childCount)
+            }
+        }
+    }
+
+    @Test
+    fun recreationKeepsWindowAndSelectedDates() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            var range = ""
+            scenario.onActivity { activity ->
+                activity.findViewById<View>(R.id.matrix_previous).performClick()
+                range = activity.findViewById<TextView>(R.id.matrix_range).text.toString()
                 val rows = activity.findViewById<LinearLayout>(R.id.export_history_rows)
-                assertEquals(24, rows.childCount)
+                (rows.getChildAt(0) as ViewGroup).getChildAt(0).performClick()
+            }
+            scenario.recreate()
+            scenario.onActivity { activity ->
+                assertEquals(range, activity.findViewById<TextView>(R.id.matrix_range).text.toString())
+                assertEquals("1 days selected", activity.findViewById<TextView>(R.id.matrix_selection_count).text.toString())
             }
         }
     }
