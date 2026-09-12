@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.LinearLayout
+import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.RadioGroup
 import android.widget.TextView
@@ -278,12 +279,12 @@ class MainActivity : ComponentActivity() {
         findViewById<View>(R.id.matrix_next).alpha = if (matrixWindowsBack > 0) 1f else 0.35f
     }
 
-    private fun createCalendarCell(row: ExportHistoryRow, today: LocalDate): TextView {
+    private fun createCalendarCell(row: ExportHistoryRow, today: LocalDate): View {
         val future = row.date > today
         val symbol = if (future) "" else coverageSymbol(row.coverage)
         val status = if (future) "Future date" else coverageLabel(row.coverage)
         val selection = if (row.selected) ", selected" else ""
-        return TextView(this).apply {
+        val cell = TextView(this).apply {
             text = "${row.date.dayOfMonth}\n$symbol"
             textSize = 12f
             gravity = android.view.Gravity.CENTER
@@ -302,6 +303,28 @@ class MainActivity : ComponentActivity() {
             setOnClickListener {
                 exportHistoryPresenter.toggle(row.date)
                 renderExportHistory()
+            }
+        }
+        if (row.coverage != DayCoverage.PENDING_RETRYING) return cell
+        return FrameLayout(this).apply {
+            cell.layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                matrixDp(48),
+            ).apply {
+                val margin = matrixDp(2)
+                setMargins(margin, margin, margin, margin)
+            }
+            addView(cell)
+            addView(ProgressBar(this@MainActivity).apply {
+                isIndeterminate = true
+                contentDescription = "Pending upload"
+                layoutParams = FrameLayout.LayoutParams(matrixDp(20), matrixDp(20)).apply {
+                    gravity = android.view.Gravity.CENTER
+                }
+            })
+            layoutParams = LinearLayout.LayoutParams(0, matrixDp(48), 1f).apply {
+                val margin = matrixDp(2)
+                setMargins(margin, margin, margin, margin)
             }
         }
     }
@@ -329,7 +352,7 @@ class MainActivity : ComponentActivity() {
             if (selectedCount > 0 && matrixPage == R.id.matrix_records) View.VISIBLE else View.GONE
         findViewById<TextView>(R.id.matrix_selection_count).text =
             resources.getQuantityString(R.plurals.matrix_days_selected, selectedCount, selectedCount)
-        findViewById<Button>(R.id.export_history_upload_selected).isEnabled = state.canUpload &&
+        findViewById<Button>(R.id.export_history_upload_selected).isEnabled = !state.uploadStarted && state.canUpload &&
             ::driveAuthorizationCoordinator.isInitialized && driveAuthorizationCoordinator.state is DriveAuthorizationState.Connected
     }
 
@@ -352,32 +375,42 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun runBackfill() {
-        val dates = exportHistoryPresenter.confirmUpload()
-        renderExportHistory()
         val auth = driveAuthorizationCoordinator.state as? DriveAuthorizationState.Connected ?: return
         val client = healthConnectClient ?: run {
             findViewById<TextView>(R.id.export_history_status).text = getString(R.string.drive_export_health_connect_not_ready)
+            renderExportHistory()
             return
         }
         val key = historyDestinationKey ?: return
+        val dates = exportHistoryPresenter.confirmUpload()
+        renderExportHistory()
         findViewById<TextView>(R.id.export_history_status).text = getString(R.string.export_history_uploading)
+        findViewById<TextView>(R.id.drive_export_status).text = getString(R.string.export_history_uploading)
         lifecycleScope.launch {
-            val result = ManualBackfillCoordinator(
-                exportStateStore,
-                exportHistoryStore,
-                HealthConnectExportReader(client),
-                GoogleDriveDestination(googleDriveGatewayFactory(this@MainActivity, auth.accountId)),
-                key,
-                pendingStore = SharedPreferencesManualBackfillPendingStore(this@MainActivity),
-            ).uploadDays(dates, ZoneId.systemDefault())
-            findViewById<TextView>(R.id.export_history_status).text = when (result) {
-                is ManualBackfillResult.Success -> getString(R.string.drive_export_status_success, result.confirmed.last().batchId, result.confirmed.size)
-                is ManualBackfillResult.NoRecordsFound -> getString(R.string.export_history_no_records)
-                is ManualBackfillResult.Retrying -> result.message
-                is ManualBackfillResult.Failure -> result.message
+            try {
+                val result = ManualBackfillCoordinator(
+                    exportStateStore,
+                    exportHistoryStore,
+                    HealthConnectExportReader(client),
+                    GoogleDriveDestination(googleDriveGatewayFactory(this@MainActivity, auth.accountId)),
+                    key,
+                    pendingStore = SharedPreferencesManualBackfillPendingStore(this@MainActivity),
+                ).uploadDays(dates, ZoneId.systemDefault()) { date, uploaded ->
+                    if (uploaded) exportHistoryPresenter.markDateUploaded(date)
+                    renderExportHistory()
+                }
+                findViewById<TextView>(R.id.export_history_status).text = when (result) {
+                    is ManualBackfillResult.Success -> getString(R.string.drive_export_status_success, result.confirmed.last().batchId, result.confirmed.size)
+                    is ManualBackfillResult.NoRecordsFound -> getString(R.string.export_history_no_records)
+                    is ManualBackfillResult.Retrying -> result.message
+                    is ManualBackfillResult.Failure -> result.message
+                }
+                findViewById<TextView>(R.id.drive_export_status).text = findViewById<TextView>(R.id.export_history_status).text
+                refreshExportHistory()
+            } finally {
+                exportHistoryPresenter.finishUpload()
+                renderExportHistory()
             }
-            exportHistoryPresenter.state.rows.filter { it.selected }.forEach { exportHistoryPresenter.toggle(it.date) }
-            refreshExportHistory()
         }
     }
 
