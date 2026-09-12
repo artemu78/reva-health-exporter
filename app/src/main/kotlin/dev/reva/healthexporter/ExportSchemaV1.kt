@@ -349,6 +349,9 @@ data class BatchHeader(
     val timeWindow: TimeWindow,
     val recordCount: Int,
     val recordTypes: List<String>,
+    val exportDate: String? = null,
+    val exportTimezone: String? = null,
+    val dailyIdentity: String? = null,
 ) {
     init {
         if (schemaVersion != CURRENT_SCHEMA_VERSION) {
