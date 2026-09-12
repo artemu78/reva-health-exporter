@@ -375,14 +375,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun runBackfill() {
-        val dates = exportHistoryPresenter.confirmUpload()
-        renderExportHistory()
         val auth = driveAuthorizationCoordinator.state as? DriveAuthorizationState.Connected ?: return
         val client = healthConnectClient ?: run {
             findViewById<TextView>(R.id.export_history_status).text = getString(R.string.drive_export_health_connect_not_ready)
+            renderExportHistory()
             return
         }
         val key = historyDestinationKey ?: return
+        val dates = exportHistoryPresenter.confirmUpload()
+        renderExportHistory()
         findViewById<TextView>(R.id.export_history_status).text = getString(R.string.export_history_uploading)
         findViewById<TextView>(R.id.drive_export_status).text = getString(R.string.export_history_uploading)
         lifecycleScope.launch {

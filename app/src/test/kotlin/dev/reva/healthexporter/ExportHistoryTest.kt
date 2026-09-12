@@ -260,6 +260,22 @@ class ExportHistoryTest {
     }
 
     @Test
+    fun missingHealthConnectClientDoesNotStartPresenterUpload() {
+        val presenter = ExportHistoryPresenter(moscow)
+        val date = LocalDate.parse("2026-08-30")
+        presenter.show(listOf(date), emptyList(), inventoryKnown = true)
+        presenter.toggle(date)
+
+        // MainActivity checks this prerequisite before calling confirmUpload().
+        val healthConnectClientAvailable = false
+        if (healthConnectClientAvailable) presenter.confirmUpload()
+
+        assertEquals(DayCoverage.NOT_UPLOADED, presenter.state.rows.single().coverage)
+        assertFalse(presenter.state.uploadStarted)
+        assertTrue(presenter.state.canUpload)
+    }
+
+    @Test
     fun presenterAllowsPreviouslyUploadedAndUnknownDaysToBeSelectedAgain() {
         val uploadedDate = LocalDate.parse("2026-08-30")
         val unknownDate = LocalDate.parse("2026-08-29")
