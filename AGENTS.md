@@ -10,6 +10,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the application structure, [ROADMAP.m
 
 ## Issue and pull-request workflow
 
+- Before starting a new feature or issue, check all open pull requests (including drafts), the current branch, and local uncommitted changes. Review pending PRs for dependencies and overlapping files, and tell the user which pending work could conflict with the new task before making implementation changes.
+- If the new work depends on or overlaps an open PR, wait for the user to merge it and then start from the updated `main`, unless the user explicitly requests a coordinated parallel approach. Do not silently start another feature on top of an unmerged feature branch. Independent work may proceed in its own branch from the latest `main`.
 - Implement every GitHub issue in its own branch and deliver it through its own pull request.
 - Name branches `issue-<number>-<short-slug>`, for example `issue-3-health-connect-probe`.
 - Create the branch from the latest `main` after all prerequisite issues have merged.
