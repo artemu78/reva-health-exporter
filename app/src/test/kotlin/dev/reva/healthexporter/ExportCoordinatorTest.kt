@@ -14,6 +14,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,8 +37,12 @@ class ExportCoordinatorTest {
         val uploadedBatches = mutableListOf<ExportBatch>()
         var uploadResult: UploadResult? = null
         var uploadThrowException: Throwable? = null
+        var verificationException: Exception? = null
 
-        override suspend fun verifyConfiguration(): DestinationStatus = status
+        override suspend fun verifyConfiguration(): DestinationStatus {
+            verificationException?.let { throw it }
+            return status
+        }
 
         override suspend fun upload(batch: ExportBatch): UploadResult {
             uploadThrowException?.let { throw it }
@@ -70,8 +75,9 @@ class ExportCoordinatorTest {
     private fun createCoordinator(
         initialLookback: Duration = Duration.ofDays(1),
         maxBatchDuration: Duration? = Duration.ofDays(1),
+        exportStateStore: ExportStateStore = stateStore,
     ): ExportCoordinator = ExportCoordinator(
-        stateStore = stateStore,
+        stateStore = exportStateStore,
         recordReader = reader,
         destination = destination,
         clock = clock,
@@ -541,5 +547,89 @@ class ExportCoordinatorTest {
             Instant.parse("2026-08-30T12:00:00Z"),
             (result as ExportCycleResult.Success).batch.header.timeWindow.endExclusive,
         )
+    }
+
+    @Test
+    fun checkpointReadFailureStopsExportWithoutOverwritingExistingProgress() = runBlocking {
+        val checkpoint = ExportCheckpoint(
+            lastWindowEnd = clock.currentInstant.minus(Duration.ofHours(6)),
+            lastBatchId = "previous-batch",
+            exportedAt = clock.currentInstant.minus(Duration.ofHours(6)),
+            totalRecordCount = 12L,
+        )
+        stateStore.saveCheckpoint(checkpoint)
+        val error = IOException("Checkpoint unavailable")
+        val failingStore = object : ExportStateStore by stateStore {
+            override fun getLastCheckpoint(): ExportCheckpoint? = throw error
+        }
+
+        val result = createCoordinator(exportStateStore = failingStore).export()
+
+        assertTrue(result is ExportCycleResult.TerminalFailure)
+        val failure = result as ExportCycleResult.TerminalFailure
+        assertSame(error, failure.cause)
+        assertNull(failure.batch)
+        assertFalse(failure.userActionRequired)
+        assertTrue(failure.message.contains("Checkpoint unavailable"))
+        assertNull(reader.lastQueriedWindow)
+        assertTrue(destination.uploadedBatches.isEmpty())
+        assertNull(stateStore.getPendingBatch())
+        assertEquals(checkpoint, stateStore.getLastCheckpoint())
+    }
+
+    @Test
+    fun destinationCheckExceptionIsRetryableBeforeAnyHealthReadOrStateChange() = runBlocking {
+        val error = IOException("Destination unreachable")
+        destination.verificationException = error
+
+        val result = createCoordinator().export()
+
+        assertTrue(result is ExportCycleResult.RetryableFailure)
+        val failure = result as ExportCycleResult.RetryableFailure
+        assertEquals("Destination check failed: Destination unreachable", failure.message)
+        assertSame(error, failure.cause)
+        assertNull(failure.batch)
+        assertNull(reader.lastQueriedWindow)
+        assertTrue(destination.uploadedBatches.isEmpty())
+        assertNull(stateStore.getPendingBatch())
+        assertNull(stateStore.getLastCheckpoint())
+    }
+
+    @Test
+    fun readFailureWithoutMessageUsesFallbackAndLeavesExportStateUntouched() = runBlocking {
+        val error = IOException()
+        reader.exceptionToThrow = error
+
+        val result = createCoordinator().export()
+
+        assertTrue(result is ExportCycleResult.RetryableFailure)
+        val failure = result as ExportCycleResult.RetryableFailure
+        assertEquals("Failed reading Health Connect records: read error", failure.message)
+        assertSame(error, failure.cause)
+        assertNull(failure.batch)
+        assertTrue(destination.uploadedBatches.isEmpty())
+        assertNull(stateStore.getPendingBatch())
+        assertNull(stateStore.getLastCheckpoint())
+    }
+
+    @Test
+    fun permissionFailurePreservesProviderMessageAndRequiresUserAction() = runBlocking {
+        val error = SecurityException("Background read permission revoked")
+        reader.exceptionToThrow = error
+
+        val result = createCoordinator().export()
+
+        assertTrue(result is ExportCycleResult.TerminalFailure)
+        val failure = result as ExportCycleResult.TerminalFailure
+        assertEquals(
+            "Health Connect read permission denied: Background read permission revoked",
+            failure.message,
+        )
+        assertSame(error, failure.cause)
+        assertTrue(failure.userActionRequired)
+        assertNull(failure.batch)
+        assertTrue(destination.uploadedBatches.isEmpty())
+        assertNull(stateStore.getPendingBatch())
+        assertNull(stateStore.getLastCheckpoint())
     }
 }
