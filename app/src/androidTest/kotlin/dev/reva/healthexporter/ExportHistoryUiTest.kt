@@ -34,6 +34,9 @@ class ExportHistoryUiTest {
                 val first = firstWeek.getChildAt(0)
                 assertTrue(first.contentDescription.contains("Unknown"))
                 first.performClick()
+                assertEquals("1 day selected", activity.findViewById<TextView>(R.id.matrix_selection_count).text.toString())
+                firstWeek.getChildAt(1).performClick()
+                assertEquals("2 days selected", activity.findViewById<TextView>(R.id.matrix_selection_count).text.toString())
                 assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.matrix_selection).visibility)
                 assertFalse(activity.findViewById<Button>(R.id.export_history_upload_selected).isEnabled)
                 activity.findViewById<View>(R.id.matrix_clear).performClick()
@@ -51,6 +54,13 @@ class ExportHistoryUiTest {
     fun navigationReturnsToTodayAndDisablesFutureDates() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
+                val minimumTarget = (48 * activity.resources.displayMetrics.density).toInt()
+                listOf(R.id.matrix_previous to "Previous 35 days", R.id.matrix_next to "Next 35 days").forEach { (id, label) ->
+                    val button = activity.findViewById<View>(id)
+                    assertEquals(label, button.contentDescription?.toString())
+                    assertTrue(button.width >= minimumTarget)
+                    assertTrue(button.height >= minimumTarget)
+                }
                 val range = activity.findViewById<TextView>(R.id.matrix_range).text.toString()
                 assertFalse(activity.findViewById<View>(R.id.matrix_next).isEnabled)
                 activity.findViewById<View>(R.id.matrix_previous).performClick()
@@ -106,8 +116,34 @@ class ExportHistoryUiTest {
             scenario.recreate()
             scenario.onActivity { activity ->
                 assertEquals(range, activity.findViewById<TextView>(R.id.matrix_range).text.toString())
-                assertEquals("1 days selected", activity.findViewById<TextView>(R.id.matrix_selection_count).text.toString())
+                assertEquals("1 day selected", activity.findViewById<TextView>(R.id.matrix_selection_count).text.toString())
             }
+        }
+    }
+
+    @Test
+    fun auditShowsStoredSummaryEvenWhenDriveIsDisconnected() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val store = SharedPreferencesExportStateStore(instrumentation.targetContext)
+        store.saveExecutionSummary(ExportExecutionSummary(
+            outcome = ExportOutcome.NOTHING_TO_EXPORT,
+            executionTimestamp = java.time.Instant.parse("2026-01-01T12:00:00Z"),
+            message = "Synthetic test summary",
+        ))
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.renderDriveAuthorization(DriveAuthorizationState.Disconnected)
+                    assertEquals("", activity.findViewById<TextView>(R.id.drive_export_status).text.toString())
+                    activity.findViewById<View>(R.id.matrix_nav_audit).performClick()
+                }
+                instrumentation.waitForIdleSync()
+                val expected = instrumentation.targetContext.getString(R.string.drive_export_status_nothing)
+                assertTrue(instrumentation.uiAutomation.rootInActiveWindow
+                    .findAccessibilityNodeInfosByText(expected).isNotEmpty())
+            }
+        } finally {
+            store.clear()
         }
     }
 

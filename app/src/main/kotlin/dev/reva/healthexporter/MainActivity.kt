@@ -202,7 +202,8 @@ class MainActivity : ComponentActivity() {
         }
         findViewById<View>(R.id.matrix_nav_audit).setOnClickListener {
             android.app.AlertDialog.Builder(this).setTitle("Latest export")
-                .setMessage(findViewById<TextView>(R.id.drive_export_status).text.ifEmpty { "No export recorded." })
+                .setMessage(exportStateStore.getLastExecutionSummary()?.let(::formatExportSummary)
+                    ?: getString(R.string.audit_no_export))
                 .setPositiveButton(android.R.string.ok, null).show()
         }
         fun window(offset: Int) {
@@ -326,7 +327,8 @@ class MainActivity : ComponentActivity() {
         val selectedCount = state.rows.count { it.selected }
         findViewById<View>(R.id.matrix_selection).visibility =
             if (selectedCount > 0 && matrixPage == R.id.matrix_records) View.VISIBLE else View.GONE
-        findViewById<TextView>(R.id.matrix_selection_count).text = "$selectedCount days selected"
+        findViewById<TextView>(R.id.matrix_selection_count).text =
+            resources.getQuantityString(R.plurals.matrix_days_selected, selectedCount, selectedCount)
         findViewById<Button>(R.id.export_history_upload_selected).isEnabled = state.canUpload &&
             ::driveAuthorizationCoordinator.isInitialized && driveAuthorizationCoordinator.state is DriveAuthorizationState.Connected
     }
@@ -422,23 +424,21 @@ class MainActivity : ComponentActivity() {
             statusView.text = ""
             return
         }
-        val lastSummary = exportStateStore.getLastExecutionSummary()
-        if (lastSummary != null) {
-            statusView.text = when (lastSummary.outcome) {
-                ExportOutcome.SUCCESS -> getString(
-                    R.string.drive_export_status_success,
-                    lastSummary.batchId.orEmpty(),
-                    lastSummary.recordCount,
-                )
-                ExportOutcome.NOTHING_TO_EXPORT -> getString(R.string.drive_export_status_nothing)
-                ExportOutcome.RETRYABLE_FAILURE,
-                ExportOutcome.TERMINAL_FAILURE,
-                ExportOutcome.USER_ACTION_REQUIRED,
-                -> getString(R.string.drive_export_status_failure, lastSummary.message)
-            }
-        } else {
-            statusView.text = getString(R.string.drive_export_status_periodic_scheduled)
-        }
+        statusView.text = exportStateStore.getLastExecutionSummary()?.let(::formatExportSummary)
+            ?: getString(R.string.drive_export_status_periodic_scheduled)
+    }
+
+    private fun formatExportSummary(summary: ExportExecutionSummary): String = when (summary.outcome) {
+        ExportOutcome.SUCCESS -> getString(
+            R.string.drive_export_status_success,
+            summary.batchId.orEmpty(),
+            summary.recordCount,
+        )
+        ExportOutcome.NOTHING_TO_EXPORT -> getString(R.string.drive_export_status_nothing)
+        ExportOutcome.RETRYABLE_FAILURE,
+        ExportOutcome.TERMINAL_FAILURE,
+        ExportOutcome.USER_ACTION_REQUIRED,
+        -> getString(R.string.drive_export_status_failure, summary.message)
     }
 
     private fun createGoogleDriveGateway(accountId: String?): GoogleDriveGateway {
