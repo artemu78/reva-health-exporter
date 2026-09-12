@@ -251,6 +251,12 @@ class ExportHistoryTest {
         assertFalse(presenter.state.uploadStarted)
         presenter.confirmUpload()
         assertTrue(presenter.state.uploadStarted)
+        assertEquals(DayCoverage.PENDING_RETRYING, presenter.state.rows.single().coverage)
+        assertFalse(presenter.state.canUpload)
+        presenter.markDateUploaded(LocalDate.parse("2026-08-30"))
+        assertEquals(DayCoverage.UPLOADED, presenter.state.rows.single().coverage)
+        presenter.finishUpload()
+        assertFalse(presenter.state.uploadStarted)
     }
 
     @Test

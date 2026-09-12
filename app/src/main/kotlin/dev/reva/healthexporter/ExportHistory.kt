@@ -292,16 +292,29 @@ class ManualBackfillCoordinator(
         data class Failure(val message: String) : RecordReadResult
     }
 
-    suspend fun uploadDays(dates: List<LocalDate>, zoneId: ZoneId): ManualBackfillResult {
+    suspend fun uploadDays(
+        dates: List<LocalDate>,
+        zoneId: ZoneId,
+        onDateCompleted: (suspend (LocalDate, Boolean) -> Unit)? = null,
+    ): ManualBackfillResult {
         require(dates.isNotEmpty())
         val confirmed = mutableListOf<ExportHistoryEntry>()
         val emptyDates = mutableListOf<LocalDate>()
         for (date in dates.distinct().sorted()) {
             val day = localDayWindow(date, zoneId)
             when (val result = uploadWindow(day, zoneId)) {
-                is WindowUploadResult.Confirmed -> confirmed += result.entry
-                WindowUploadResult.Empty -> emptyDates += date
-                is WindowUploadResult.Stopped -> return result.result
+                is WindowUploadResult.Confirmed -> {
+                    confirmed += result.entry
+                    onDateCompleted?.invoke(date, true)
+                }
+                WindowUploadResult.Empty -> {
+                    emptyDates += date
+                    onDateCompleted?.invoke(date, false)
+                }
+                is WindowUploadResult.Stopped -> {
+                    onDateCompleted?.invoke(date, false)
+                    return result.result
+                }
             }
         }
         return summarizeBackfill(confirmed, emptyDates)
@@ -440,7 +453,21 @@ class ExportHistoryPresenter(private val zoneId: ZoneId = ZoneId.systemDefault()
     }
     fun confirmUpload(): List<LocalDate> {
         val dates = requestConfirmation().dates
-        state = state.copy(uploadStarted = true, canUpload = false)
+        state = state.copy(
+            rows = state.rows.map { row ->
+                if (row.date in dates) row.copy(coverage = DayCoverage.PENDING_RETRYING) else row
+            },
+            uploadStarted = true,
+            canUpload = false,
+        )
         return dates
+    }
+    fun markDateUploaded(date: LocalDate) {
+        state = state.copy(rows = state.rows.map { row ->
+            if (row.date == date) row.copy(coverage = DayCoverage.UPLOADED, selected = false) else row
+        })
+    }
+    fun finishUpload() {
+        state = state.copy(uploadStarted = false, canUpload = state.rows.any { it.selected })
     }
 }
