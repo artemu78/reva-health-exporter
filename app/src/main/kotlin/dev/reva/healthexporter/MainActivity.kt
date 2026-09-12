@@ -256,50 +256,73 @@ class MainActivity : ComponentActivity() {
     private fun renderExportHistory() {
         val state = exportHistoryPresenter.state
         val today = LocalDate.now()
+        renderCalendarNavigation(state)
+        findViewById<LinearLayout>(R.id.export_history_rows).apply {
+            removeAllViews()
+            state.rows.chunked(7).forEach { week ->
+                val line = LinearLayout(this@MainActivity)
+                week.forEach { row -> line.addView(createCalendarCell(row, today)) }
+                addView(line)
+            }
+        }
+        renderSelectionControls(state)
+    }
+
+    private fun renderCalendarNavigation(state: ExportHistoryScreenState) {
         val formatter = java.time.format.DateTimeFormatter.ofPattern("MMM yyyy")
         val dates = state.rows.map { it.date }
         findViewById<TextView>(R.id.matrix_range).text = if (dates.isEmpty()) "" else
             "${dates.first().format(formatter)} – ${dates.last().format(formatter)}"
         findViewById<View>(R.id.matrix_next).isEnabled = matrixWindowsBack > 0
         findViewById<View>(R.id.matrix_next).alpha = if (matrixWindowsBack > 0) 1f else 0.35f
-        fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-        findViewById<LinearLayout>(R.id.export_history_rows).apply {
-            removeAllViews()
-            state.rows.chunked(7).forEach { week ->
-                val line = LinearLayout(this@MainActivity)
-                week.forEach { row ->
-                    val future = row.date > today
-                    val symbol = when (row.coverage) {
-                        DayCoverage.UPLOADED -> "✓"
-                        DayCoverage.PARTIALLY_UPLOADED -> "◐"
-                        DayCoverage.NOT_UPLOADED -> "!"
-                        DayCoverage.PENDING_RETRYING -> "↻"
-                        DayCoverage.UNKNOWN -> "?"
-                    }
-                    line.addView(TextView(this@MainActivity).apply {
-                        text = "${row.date.dayOfMonth}\n${if (future) "" else symbol}"
-                        textSize = 12f
-                        gravity = android.view.Gravity.CENTER
-                        isEnabled = !future
-                        isSelected = row.selected
-                        alpha = if (future) 0.3f else 1f
-                        contentDescription = "${row.date}, ${if (future) "Future date" else coverageLabel(row.coverage)}${if (row.selected) ", selected" else ""}"
-                        setTextColor(android.graphics.Color.parseColor(if (row.coverage == DayCoverage.NOT_UPLOADED) "#BA1A1A" else "#005152"))
-                        background = android.graphics.drawable.GradientDrawable().apply {
-                            setColor(android.graphics.Color.parseColor(if (row.selected) "#CCE8E7" else "#ECF5F5"))
-                            cornerRadius = dp(8).toFloat()
-                            if (row.selected) setStroke(dp(2), android.graphics.Color.parseColor("#005152"))
-                        }
-                        layoutParams = LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) }
-                        setOnClickListener {
-                            exportHistoryPresenter.toggle(row.date)
-                            renderExportHistory()
-                        }
-                    })
-                }
-                addView(line)
+    }
+
+    private fun createCalendarCell(row: ExportHistoryRow, today: LocalDate): TextView {
+        val future = row.date > today
+        val symbol = if (future) "" else coverageSymbol(row.coverage)
+        val status = if (future) "Future date" else coverageLabel(row.coverage)
+        val selection = if (row.selected) ", selected" else ""
+        return TextView(this).apply {
+            text = "${row.date.dayOfMonth}\n$symbol"
+            textSize = 12f
+            gravity = android.view.Gravity.CENTER
+            isEnabled = !future
+            isSelected = row.selected
+            alpha = if (future) 0.3f else 1f
+            contentDescription = "${row.date}, $status$selection"
+            setTextColor(android.graphics.Color.parseColor(
+                if (row.coverage == DayCoverage.NOT_UPLOADED) "#BA1A1A" else "#005152",
+            ))
+            background = calendarCellBackground(row.selected)
+            layoutParams = LinearLayout.LayoutParams(0, matrixDp(48), 1f).apply {
+                val margin = matrixDp(2)
+                setMargins(margin, margin, margin, margin)
+            }
+            setOnClickListener {
+                exportHistoryPresenter.toggle(row.date)
+                renderExportHistory()
             }
         }
+    }
+
+    private fun calendarCellBackground(selected: Boolean) =
+        android.graphics.drawable.GradientDrawable().apply {
+            setColor(android.graphics.Color.parseColor(if (selected) "#CCE8E7" else "#ECF5F5"))
+            cornerRadius = matrixDp(8).toFloat()
+            if (selected) setStroke(matrixDp(2), android.graphics.Color.parseColor("#005152"))
+        }
+
+    private fun matrixDp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private fun coverageSymbol(coverage: DayCoverage): String = when (coverage) {
+        DayCoverage.UPLOADED -> "✓"
+        DayCoverage.PARTIALLY_UPLOADED -> "◐"
+        DayCoverage.NOT_UPLOADED -> "!"
+        DayCoverage.PENDING_RETRYING -> "↻"
+        DayCoverage.UNKNOWN -> "?"
+    }
+
+    private fun renderSelectionControls(state: ExportHistoryScreenState) {
         val selectedCount = state.rows.count { it.selected }
         findViewById<View>(R.id.matrix_selection).visibility =
             if (selectedCount > 0 && matrixPage == R.id.matrix_records) View.VISIBLE else View.GONE
