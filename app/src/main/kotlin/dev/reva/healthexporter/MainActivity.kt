@@ -66,6 +66,9 @@ class MainActivity : ComponentActivity() {
     private val exportStateStore by lazy { SharedPreferencesExportStateStore(this) }
     private val exportHistoryStore by lazy { SharedPreferencesExportHistoryStore(this) }
     private val exportHistoryPresenter by lazy { ExportHistoryPresenter(ZoneId.systemDefault()) }
+    private var matrixWindowsBack = 0
+    private var matrixPage = R.id.matrix_records
+    private var restoredMatrixSelection = emptySet<LocalDate>()
     private var historyDestinationKey: String? = null
     private var lastValidDiagnosticState: DiagnosticScreenState? = null
     private var lastDiagnosticResult: DiagnosticProbeResult? = null
@@ -81,6 +84,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        matrixWindowsBack = savedInstanceState?.getInt("matrix_window", 0) ?: 0
+        matrixPage = savedInstanceState?.getInt("matrix_page", R.id.matrix_records) ?: R.id.matrix_records
+        restoredMatrixSelection = savedInstanceState?.getStringArrayList("matrix_selection")
+            .orEmpty().map(LocalDate::parse).toSet()
+        setupMatrixNavigation()
+        listOf(R.id.matrix_records, R.id.matrix_vaults, R.id.matrix_preferences).forEach {
+            findViewById<View>(it).visibility = if (it == matrixPage) View.VISIBLE else View.GONE
+        }
         findViewById<TextView>(R.id.app_version).text = getString(R.string.app_version, BuildConfig.VERSION_NAME)
         restoredDiagnosticState(savedInstanceState)?.let { restored ->
             diagnosticPresenter.restore(restored)
@@ -126,11 +137,6 @@ class MainActivity : ComponentActivity() {
             triggerDriveExport()
         }
         findViewById<Button>(R.id.export_history_refresh).setOnClickListener { refreshExportHistory() }
-        findViewById<Button>(R.id.export_history_load_more).setOnClickListener {
-            val entries = historyDestinationKey?.let(exportHistoryStore::entries).orEmpty()
-            exportHistoryPresenter.loadMore(entries)
-            renderExportHistory()
-        }
         findViewById<Button>(R.id.export_history_upload_selected).setOnClickListener { confirmBackfill() }
         showInitialExportHistory(inventoryKnown = false)
         renderDriveAuthorization(driveAuthorizationCoordinator.state)
@@ -147,7 +153,7 @@ class MainActivity : ComponentActivity() {
 
     fun renderDriveAuthorization(state: DriveAuthorizationState) {
         findViewById<TextView>(R.id.drive_authorization_status).text = when (state) {
-            DriveAuthorizationState.Disconnected -> ""
+            DriveAuthorizationState.Disconnected -> getString(R.string.drive_disconnected)
             DriveAuthorizationState.Connecting -> getString(R.string.drive_connecting)
             is DriveAuthorizationState.Connected -> getString(R.string.drive_connected)
             DriveAuthorizationState.Disconnecting -> getString(R.string.drive_disconnecting)
@@ -176,16 +182,54 @@ class MainActivity : ComponentActivity() {
         renderExportStatus()
     }
 
-    private fun recentHistoryDates(count: Int = 14): List<LocalDate> =
-        (0L until count.toLong()).map { LocalDate.now().minusDays(it) }
+    private fun recentHistoryDates(): List<LocalDate> =
+        uploadMatrixDates(LocalDate.now(), matrixWindowsBack)
 
-    private fun showInitialExportHistory(inventoryKnown: Boolean, visibleDateCount: Int = 14) {
+    private fun setupMatrixNavigation() {
+        fun page(id: Int) {
+            matrixPage = id
+            listOf(R.id.matrix_records, R.id.matrix_vaults, R.id.matrix_preferences).forEach {
+                findViewById<View>(it).visibility = if (it == id) View.VISIBLE else View.GONE
+            }
+            renderExportHistory()
+        }
+        findViewById<View>(R.id.matrix_nav_records).setOnClickListener { page(R.id.matrix_records) }
+        listOf(R.id.matrix_nav_vaults, R.id.matrix_account).forEach { id ->
+            findViewById<View>(id).setOnClickListener { page(R.id.matrix_vaults) }
+        }
+        listOf(R.id.matrix_nav_settings, R.id.matrix_settings).forEach { id ->
+            findViewById<View>(id).setOnClickListener { page(R.id.matrix_preferences) }
+        }
+        findViewById<View>(R.id.matrix_nav_audit).setOnClickListener {
+            android.app.AlertDialog.Builder(this).setTitle("Latest export")
+                .setMessage(exportStateStore.getLastExecutionSummary()?.let(::formatExportSummary)
+                    ?: getString(R.string.audit_no_export))
+                .setPositiveButton(android.R.string.ok, null).show()
+        }
+        fun window(offset: Int) {
+            matrixWindowsBack = offset.coerceAtLeast(0)
+            showInitialExportHistory(exportHistoryPresenter.state.inventoryKnown)
+        }
+        findViewById<View>(R.id.matrix_previous).setOnClickListener { window(matrixWindowsBack + 1) }
+        findViewById<View>(R.id.matrix_next).setOnClickListener { window(matrixWindowsBack - 1) }
+        findViewById<View>(R.id.matrix_today).setOnClickListener { window(0) }
+        findViewById<View>(R.id.matrix_clear).setOnClickListener {
+            exportHistoryPresenter.state.rows.filter { it.selected }.forEach { exportHistoryPresenter.toggle(it.date) }
+            renderExportHistory()
+        }
+    }
+
+    private fun showInitialExportHistory(inventoryKnown: Boolean) {
         val key = historyDestinationKey
+        val selected = exportHistoryPresenter.state.rows.filter { it.selected }.map { it.date }.toSet() + restoredMatrixSelection
+        restoredMatrixSelection = emptySet()
         exportHistoryPresenter.show(
-            recentHistoryDates(visibleDateCount),
+            recentHistoryDates(),
             if (key == null) emptyList() else exportHistoryStore.entries(key),
             inventoryKnown,
         )
+        exportHistoryPresenter.state.rows.filter { it.date in selected && it.date <= LocalDate.now() }
+            .forEach { exportHistoryPresenter.toggle(it.date) }
         renderExportHistory()
     }
 
@@ -197,7 +241,6 @@ class MainActivity : ComponentActivity() {
             return
         }
         findViewById<TextView>(R.id.export_history_status).text = getString(R.string.export_history_refreshing)
-        val visibleDateCount = exportHistoryPresenter.state.rows.size.coerceAtLeast(14)
         lifecycleScope.launch {
             val gateway = googleDriveGatewayFactory(this@MainActivity, auth.accountId)
             val result = DriveHistoryInventoryRefresher(
@@ -205,7 +248,6 @@ class MainActivity : ComponentActivity() {
             ).refresh()
             showInitialExportHistory(
                 inventoryKnown = result is HistoryRefreshResult.Success,
-                visibleDateCount = visibleDateCount,
             )
             findViewById<TextView>(R.id.export_history_status).text =
                 if (result is HistoryRefreshResult.Unknown) result.reason else ""
@@ -214,23 +256,81 @@ class MainActivity : ComponentActivity() {
 
     private fun renderExportHistory() {
         val state = exportHistoryPresenter.state
-        findViewById<TextView>(R.id.export_history_timezone).text =
-            getString(R.string.export_history_timezone, state.zoneId.id)
+        val today = LocalDate.now()
+        renderCalendarNavigation(state)
         findViewById<LinearLayout>(R.id.export_history_rows).apply {
             removeAllViews()
-            state.rows.forEach { row ->
-                addView(CheckBox(this@MainActivity).apply {
-                    text = "${row.date} — ${coverageLabel(row.coverage)}"
-                    isChecked = row.selected
-                    contentDescription = text
-                    setOnClickListener {
-                        exportHistoryPresenter.toggle(row.date)
-                        renderExportHistory()
-                    }
-                })
+            state.rows.chunked(7).forEach { week ->
+                val line = LinearLayout(this@MainActivity)
+                week.forEach { row -> line.addView(createCalendarCell(row, today)) }
+                addView(line)
             }
         }
-        findViewById<Button>(R.id.export_history_upload_selected).isEnabled = state.canUpload
+        renderSelectionControls(state)
+    }
+
+    private fun renderCalendarNavigation(state: ExportHistoryScreenState) {
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("MMM yyyy")
+        val dates = state.rows.map { it.date }
+        findViewById<TextView>(R.id.matrix_range).text = if (dates.isEmpty()) "" else
+            "${dates.first().format(formatter)} – ${dates.last().format(formatter)}"
+        findViewById<View>(R.id.matrix_next).isEnabled = matrixWindowsBack > 0
+        findViewById<View>(R.id.matrix_next).alpha = if (matrixWindowsBack > 0) 1f else 0.35f
+    }
+
+    private fun createCalendarCell(row: ExportHistoryRow, today: LocalDate): TextView {
+        val future = row.date > today
+        val symbol = if (future) "" else coverageSymbol(row.coverage)
+        val status = if (future) "Future date" else coverageLabel(row.coverage)
+        val selection = if (row.selected) ", selected" else ""
+        return TextView(this).apply {
+            text = "${row.date.dayOfMonth}\n$symbol"
+            textSize = 12f
+            gravity = android.view.Gravity.CENTER
+            isEnabled = !future
+            isSelected = row.selected
+            alpha = if (future) 0.3f else 1f
+            contentDescription = "${row.date}, $status$selection"
+            setTextColor(android.graphics.Color.parseColor(
+                if (row.coverage == DayCoverage.NOT_UPLOADED) "#BA1A1A" else "#005152",
+            ))
+            background = calendarCellBackground(row.selected)
+            layoutParams = LinearLayout.LayoutParams(0, matrixDp(48), 1f).apply {
+                val margin = matrixDp(2)
+                setMargins(margin, margin, margin, margin)
+            }
+            setOnClickListener {
+                exportHistoryPresenter.toggle(row.date)
+                renderExportHistory()
+            }
+        }
+    }
+
+    private fun calendarCellBackground(selected: Boolean) =
+        android.graphics.drawable.GradientDrawable().apply {
+            setColor(android.graphics.Color.parseColor(if (selected) "#CCE8E7" else "#ECF5F5"))
+            cornerRadius = matrixDp(8).toFloat()
+            if (selected) setStroke(matrixDp(2), android.graphics.Color.parseColor("#005152"))
+        }
+
+    private fun matrixDp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private fun coverageSymbol(coverage: DayCoverage): String = when (coverage) {
+        DayCoverage.UPLOADED -> "✓"
+        DayCoverage.PARTIALLY_UPLOADED -> "◐"
+        DayCoverage.NOT_UPLOADED -> "!"
+        DayCoverage.PENDING_RETRYING -> "↻"
+        DayCoverage.UNKNOWN -> "?"
+    }
+
+    private fun renderSelectionControls(state: ExportHistoryScreenState) {
+        val selectedCount = state.rows.count { it.selected }
+        findViewById<View>(R.id.matrix_selection).visibility =
+            if (selectedCount > 0 && matrixPage == R.id.matrix_records) View.VISIBLE else View.GONE
+        findViewById<TextView>(R.id.matrix_selection_count).text =
+            resources.getQuantityString(R.plurals.matrix_days_selected, selectedCount, selectedCount)
+        findViewById<Button>(R.id.export_history_upload_selected).isEnabled = state.canUpload &&
+            ::driveAuthorizationCoordinator.isInitialized && driveAuthorizationCoordinator.state is DriveAuthorizationState.Connected
     }
 
     private fun coverageLabel(coverage: DayCoverage): String = getString(when (coverage) {
@@ -253,6 +353,7 @@ class MainActivity : ComponentActivity() {
 
     private fun runBackfill() {
         val dates = exportHistoryPresenter.confirmUpload()
+        renderExportHistory()
         val auth = driveAuthorizationCoordinator.state as? DriveAuthorizationState.Connected ?: return
         val client = healthConnectClient ?: run {
             findViewById<TextView>(R.id.export_history_status).text = getString(R.string.drive_export_health_connect_not_ready)
@@ -275,6 +376,7 @@ class MainActivity : ComponentActivity() {
                 is ManualBackfillResult.Retrying -> result.message
                 is ManualBackfillResult.Failure -> result.message
             }
+            exportHistoryPresenter.state.rows.filter { it.selected }.forEach { exportHistoryPresenter.toggle(it.date) }
             refreshExportHistory()
         }
     }
@@ -322,23 +424,21 @@ class MainActivity : ComponentActivity() {
             statusView.text = ""
             return
         }
-        val lastSummary = exportStateStore.getLastExecutionSummary()
-        if (lastSummary != null) {
-            statusView.text = when (lastSummary.outcome) {
-                ExportOutcome.SUCCESS -> getString(
-                    R.string.drive_export_status_success,
-                    lastSummary.batchId.orEmpty(),
-                    lastSummary.recordCount,
-                )
-                ExportOutcome.NOTHING_TO_EXPORT -> getString(R.string.drive_export_status_nothing)
-                ExportOutcome.RETRYABLE_FAILURE,
-                ExportOutcome.TERMINAL_FAILURE,
-                ExportOutcome.USER_ACTION_REQUIRED,
-                -> getString(R.string.drive_export_status_failure, lastSummary.message)
-            }
-        } else {
-            statusView.text = getString(R.string.drive_export_status_periodic_scheduled)
-        }
+        statusView.text = exportStateStore.getLastExecutionSummary()?.let(::formatExportSummary)
+            ?: getString(R.string.drive_export_status_periodic_scheduled)
+    }
+
+    private fun formatExportSummary(summary: ExportExecutionSummary): String = when (summary.outcome) {
+        ExportOutcome.SUCCESS -> getString(
+            R.string.drive_export_status_success,
+            summary.batchId.orEmpty(),
+            summary.recordCount,
+        )
+        ExportOutcome.NOTHING_TO_EXPORT -> getString(R.string.drive_export_status_nothing)
+        ExportOutcome.RETRYABLE_FAILURE,
+        ExportOutcome.TERMINAL_FAILURE,
+        ExportOutcome.USER_ACTION_REQUIRED,
+        -> getString(R.string.drive_export_status_failure, summary.message)
     }
 
     private fun createGoogleDriveGateway(accountId: String?): GoogleDriveGateway {
@@ -363,6 +463,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("matrix_window", matrixWindowsBack)
+        outState.putInt("matrix_page", matrixPage)
+        outState.putStringArrayList("matrix_selection", ArrayList(exportHistoryPresenter.state.rows
+            .filter { it.selected }.map { it.date.toString() }))
         lastValidDiagnosticState?.let { outState.putSerializable(DIAGNOSTIC_STATE_KEY, it) }
         super.onSaveInstanceState(outState)
     }

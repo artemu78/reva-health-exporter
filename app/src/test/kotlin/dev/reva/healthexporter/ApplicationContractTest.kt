@@ -226,7 +226,7 @@ class ApplicationContractTest {
     }
 
     @Test
-    fun `main layout and strings provide the version footer at the bottom of the screen`() {
+    fun `settings retain the installed version footer`() {
         val layout = projectDirectory.resolve("src/main/res/layout/activity_main.xml")
         val strings = projectDirectory.resolve("src/main/res/values/strings.xml")
 
@@ -242,7 +242,8 @@ class ApplicationContractTest {
         assertEquals("Version %1\$s", values["app_version"])
 
         val layoutDocument = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(layout.toFile())
-        val linearLayout = layoutDocument.getElementsByTagName("LinearLayout").item(0)
+        val linearLayout = layoutDocument.getElementsByTagName("LinearLayout").asSequence()
+            .first { it.attributes.getNamedItem("android:id")?.nodeValue == "@+id/matrix_preferences" }
         val childNodes = (0 until linearLayout.childNodes.length)
             .map { linearLayout.childNodes.item(it) }
             .filter { it.nodeType == org.w3c.dom.Node.ELEMENT_NODE }

@@ -63,4 +63,11 @@
     <string name="background_read_unsupported">Background Health Connect reading is unsupported on Android 11. Unattended periodic exports will switch to user-triggered export.</string>
     <string name="background_probe_running">Background read worker is enqueued. You can background the app now.</string>
     <string name="background_probe_no_run">No background probe has run yet.</string>
+    <string name="audit_no_export">No export recorded.</string>
+    <string name="matrix_previous_description">Previous 35 days</string>
+    <string name="matrix_next_description">Next 35 days</string>
+    <plurals name="matrix_days_selected">
+        <item quantity="one">%d day selected</item>
+        <item quantity="other">%d days selected</item>
+    </plurals>
 </resources>
