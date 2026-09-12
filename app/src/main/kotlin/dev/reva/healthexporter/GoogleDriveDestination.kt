@@ -147,7 +147,9 @@ class GoogleDriveDestination(
 
     override suspend fun upload(batch: ExportBatch): UploadResult {
         return try {
-            val startUtc = batch.header.timeWindow.startInclusive.atZone(ZoneOffset.UTC)
+            val startUtc = batch.header.timeWindow.startInclusive.atZone(
+                batch.header.exportTimezone?.let(java.time.ZoneId::of) ?: ZoneOffset.UTC,
+            )
             val year = startUtc.year.toString()
             val month = String.format(Locale.ROOT, "%02d", startUtc.monthValue)
 
@@ -155,7 +157,7 @@ class GoogleDriveDestination(
                 listOf(rootFolderName, schemaFolderName, year, month),
             )
 
-            val filename = LocalFileDestination.formatBatchFilename(batch.header)
+            val filename = LocalFileDestination.formatSnapshotFilename(batch.header)
 
             val existingFile = driveGateway.findExistingBatch(
                 parentFolderId = targetFolderId,
@@ -172,7 +174,11 @@ class GoogleDriveDestination(
                 "windowEnd" to batch.header.timeWindow.endExclusive.toString(),
                 "historyStatus" to HistoryBatchStatus.CONFIRMED.name,
                 "historyUpdatedAt" to batch.header.createdAt.toString(),
-            )
+            ) + listOfNotNull(
+                batch.header.exportDate?.let { "exportDate" to it },
+                batch.header.exportTimezone?.let { "exportTimezone" to it },
+                batch.header.dailyIdentity?.let { "dailyIdentity" to it },
+            ).toMap()
 
             if (existingFile != null) {
                 val updatedFile = driveGateway.updateFile(

@@ -164,6 +164,9 @@ open class ExportBatchSerializer {
         add("recordTypes", JsonArray().also { array ->
             recordTypes.sorted().forEach(array::add)
         })
+        exportDate?.let { addProperty("exportDate", it) }
+        exportTimezone?.let { addProperty("exportTimezone", it) }
+        dailyIdentity?.let { addProperty("dailyIdentity", it) }
     }
 
     private fun CanonicalRecord.toJson(): JsonObject = JsonObject().apply {
@@ -270,6 +273,9 @@ open class ExportBatchSerializer {
             timeWindow = timeWindow,
             recordCount = recordCount,
             recordTypes = recordTypes,
+            exportDate = optionalString("exportDate"),
+            exportTimezone = optionalString("exportTimezone"),
+            dailyIdentity = optionalString("dailyIdentity"),
         )
     }
 
