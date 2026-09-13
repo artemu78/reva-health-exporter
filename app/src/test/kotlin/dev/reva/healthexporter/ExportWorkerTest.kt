@@ -14,7 +14,9 @@ import androidx.health.connect.client.units.Length
 import androidx.work.ListenableWorker
 import java.io.IOException
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -58,10 +60,13 @@ class ExportWorkerTest {
     private val inMemoryStore = InMemoryExportStateStore(installationId = "inst-worker-test")
     private val destination = FakeExportDestination()
     private val idGen = IdGenerator { "batch-worker-001" }
+    private fun expectedDailyBatchId(date: String = "2026-08-29"): String =
+        dailySnapshotKey("FakeDestination", null, ZoneOffset.UTC, LocalDate.parse(date)).identity
 
     @Before
     fun setUp() {
         ExportWorker.clock = clock
+        ExportWorker.zoneId = ZoneOffset.UTC
         ExportWorker.stateStoreFactory = { inMemoryStore }
         ExportWorker.destinationFactory = { destination }
         ExportWorker.idGenerator = idGen
@@ -82,35 +87,36 @@ class ExportWorkerTest {
         val context = null // or mock if needed
         val result = ExportWorker.execute(context = null)
 
+        val expectedBatchId = expectedDailyBatchId("2026-08-29")
         assertTrue(result is ListenableWorker.Result.Success)
         val successResult = result as ListenableWorker.Result.Success
         assertEquals(ExportOutcome.SUCCESS.name, successResult.outputData.getString(ExportWorker.KEY_OUTCOME))
-        assertEquals("batch-worker-001", successResult.outputData.getString(ExportWorker.KEY_BATCH_ID))
+        assertEquals(expectedBatchId, successResult.outputData.getString(ExportWorker.KEY_BATCH_ID))
         assertEquals(5, successResult.outputData.getInt(ExportWorker.KEY_RECORD_COUNT, 0))
-        assertEquals("drive://files/batch-worker-001", successResult.outputData.getString(ExportWorker.KEY_LOCATION))
+        assertEquals("drive://files/$expectedBatchId", successResult.outputData.getString(ExportWorker.KEY_LOCATION))
 
         // State assertions
         val summary = inMemoryStore.getLastExecutionSummary()
         assertNotNull(summary)
         assertEquals(ExportOutcome.SUCCESS, summary!!.outcome)
-        assertEquals("batch-worker-001", summary.batchId)
+        assertEquals(expectedBatchId, summary.batchId)
         assertEquals(5, summary.recordCount)
         assertEquals(testInstant, summary.executionTimestamp)
-        assertEquals("drive://files/batch-worker-001", summary.destinationLocation)
+        assertEquals("drive://files/$expectedBatchId", summary.destinationLocation)
 
         val checkpoint = inMemoryStore.getLastCheckpoint()
         assertNotNull(checkpoint)
-        assertEquals("batch-worker-001", checkpoint!!.lastBatchId)
+        assertEquals(expectedBatchId, checkpoint!!.lastBatchId)
         assertEquals(5L, checkpoint.totalRecordCount)
         assertNull(inMemoryStore.getPendingBatch())
     }
 
     @Test
     fun nothingToExportReturnsSuccessWithNothingToExportOutcome() = runBlocking {
-        // Set previous checkpoint so window is up to date
+        // Set previous checkpoint so window is up to date through current day bound
         inMemoryStore.saveCheckpoint(
             ExportCheckpoint(
-                lastWindowEnd = testInstant,
+                lastWindowEnd = Instant.parse("2026-08-31T00:00:00Z"),
                 lastBatchId = "batch-prev",
                 exportedAt = testInstant.minusSeconds(60),
                 totalRecordCount = 10L,
@@ -152,6 +158,7 @@ class ExportWorkerTest {
 
         assertTrue(result is ListenableWorker.Result.Retry)
 
+        val expectedBatchId = expectedDailyBatchId("2026-08-29")
         val summary = inMemoryStore.getLastExecutionSummary()
         assertNotNull(summary)
         assertEquals(ExportOutcome.RETRYABLE_FAILURE, summary!!.outcome)
@@ -160,7 +167,7 @@ class ExportWorkerTest {
         assertNull("Checkpoint must NOT advance on failure", inMemoryStore.getLastCheckpoint())
         val pending = inMemoryStore.getPendingBatch()
         assertNotNull("Pending batch must be preserved for retry", pending)
-        assertEquals("batch-worker-001", pending!!.header.batchId)
+        assertEquals(expectedBatchId, pending!!.header.batchId)
     }
 
     @Test

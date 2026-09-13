@@ -118,7 +118,7 @@ class ExportHistoryTest {
         assertEquals(2, destination.uploadedBatches.size)
         assertEquals(originalCheckpoint, state.getLastCheckpoint())
         assertEquals(
-            stableBackfillBatchId("destination-a", localDayWindow(dates[0], moscow)),
+            dailySnapshotKey(destination.destinationName, null, moscow, dates[0]).identity,
             destination.uploadedBatches[0].header.batchId,
         )
         assertTrue(history.entries("destination-a").all { it.status == HistoryBatchStatus.CONFIRMED })
@@ -126,7 +126,7 @@ class ExportHistoryTest {
         backfill.uploadDays(listOf(dates[0]), moscow)
         assertEquals(3, destination.uploadedBatches.size)
         assertEquals(
-            stableBackfillBatchId("destination-a", localDayWindow(dates[0], moscow)),
+            dailySnapshotKey(destination.destinationName, null, moscow, dates[0]).identity,
             destination.uploadedBatches.last().header.batchId,
         )
         assertEquals(3, reader.windows.size)

@@ -13,6 +13,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SchemaV1CompatibilityTest {
@@ -95,8 +96,9 @@ class SchemaV1CompatibilityTest {
         // 8. Assert Re-serialization produces deterministic output with stripped metadata
         val reSerialized = serializer.serializeToNdjson(batch)
         assertFalse(reSerialized.contains("\"device\""))
-        assertFalse(reSerialized.contains("\"recordId\""))
-        assertFalse(reSerialized.contains("\"clientRecordId\""))
+        assertTrue(reSerialized.contains("\"recordId\""))
+        assertTrue(reSerialized.contains("\"clientRecordId\""))
+        assertFalse(reSerialized.contains("\"recordingMethod\""))
     }
 
     @Test
@@ -154,6 +156,8 @@ class SchemaV1CompatibilityTest {
 
         // 2. Assert Steps record
         val steps = batch.records.filterIsInstance<CanonicalStepsRecord>().first()
+        assertEquals("rec_steps_golden_01", steps.metadata.recordId)
+        assertEquals("client_steps_01", steps.metadata.clientRecordId)
         assertEquals("com.mi.health", steps.metadata.origin)
         assertEquals(Instant.parse("2026-08-29T08:00:00Z"), steps.startTime)
         assertEquals(ZoneOffset.ofHours(3), steps.startZoneOffset)
@@ -163,6 +167,7 @@ class SchemaV1CompatibilityTest {
 
         // 3. Assert Heart Rate record
         val hr = batch.records.filterIsInstance<CanonicalHeartRateRecord>().first()
+        assertEquals("rec_hr_golden_01", hr.metadata.recordId)
         assertEquals("com.mi.health", hr.metadata.origin)
         assertEquals(2, hr.samples.size)
         assertEquals(HeartRateSample(Instant.parse("2026-08-29T08:01:00Z"), 72L), hr.samples[0])
@@ -170,16 +175,19 @@ class SchemaV1CompatibilityTest {
 
         // 4. Assert Distance record
         val dist = batch.records.filterIsInstance<CanonicalDistanceRecord>().first()
+        assertEquals("rec_dist_golden_01", dist.metadata.recordId)
         assertEquals("com.mi.health", dist.metadata.origin)
         assertEquals(850.5, dist.distanceMeters, 0.001)
 
         // 5. Assert Calories record
         val cal = batch.records.filterIsInstance<CanonicalTotalCaloriesBurnedRecord>().first()
+        assertEquals("rec_cal_golden_01", cal.metadata.recordId)
         assertEquals("com.mi.health", cal.metadata.origin)
         assertEquals(45.2, cal.energyKilocalories, 0.001)
 
         // 6. Assert Sleep record
         val sleep = batch.records.filterIsInstance<CanonicalSleepSessionRecord>().first()
+        assertEquals("rec_sleep_golden_01", sleep.metadata.recordId)
         assertEquals("com.mi.health", sleep.metadata.origin)
         assertEquals("Night Sleep", sleep.title)
         assertNull(sleep.notes)
@@ -190,6 +198,7 @@ class SchemaV1CompatibilityTest {
 
         // 7. Assert Exercise record
         val exercise = batch.records.filterIsInstance<CanonicalExerciseSessionRecord>().first()
+        assertEquals("rec_ex_golden_01", exercise.metadata.recordId)
         assertEquals("com.mi.health", exercise.metadata.origin)
         assertEquals(ExerciseSessionRecord.EXERCISE_TYPE_WALKING, exercise.exerciseType)
         assertEquals("Evening Outdoor Walk", exercise.title)
@@ -202,8 +211,8 @@ class SchemaV1CompatibilityTest {
         // 8. Assert Re-serialization is deterministic and stripped
         val reSerialized = serializer.serializeToJson(batch)
         assertFalse(reSerialized.contains("\"device\""))
-        assertFalse(reSerialized.contains("\"recordId\""))
-        assertFalse(reSerialized.contains("\"clientRecordId\""))
+        assertTrue(reSerialized.contains("\"recordId\""))
+        assertTrue(reSerialized.contains("\"clientRecordId\""))
         assertFalse(reSerialized.contains("\"recordingMethod\""))
     }
 

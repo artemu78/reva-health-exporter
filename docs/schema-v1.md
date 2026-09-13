@@ -32,6 +32,8 @@ Each batch file is a standalone JSON document structured as:
   "records": [
     {
       "recordType": "steps",
+      "recordId": "rec_steps_golden_01",
+      "clientRecordId": "client_steps_01",
       "origin": "com.mi.health",
       "startTime": "2026-08-29T08:00:00Z",
       "startZoneOffset": "+03:00",
@@ -50,24 +52,22 @@ Records within `"records"` are sorted deterministically prior to export:
 3. `endTime` ASC
 4. `recordId` / internal content tie-breaker ASC
 
-*(Note: `recordId` serves as an internal tie-breaker during sorting before metadata stripping; public exported JSON records omit `recordId`.)*
-
 ---
 
 ## 2. Stripped verbose metadata & privacy
 
-To minimize payload clutter and produce clean, human-readable health exports, internal device provenance and sync metadata are stripped from exported records:
+To minimize payload clutter and produce clean, human-readable health exports, internal device provenance and sync metadata are stripped from exported records while retaining deterministic record identifiers:
 
 - **Stripped fields:**
   - `device` (including `manufacturer`, `model`, `type`)
-  - `recordId`
-  - `clientRecordId`
   - `recordingMethod`
   - `clientRecordVersion`
   - `lastModifiedTime`
 
 - **Retained essential fields:**
   - `recordType` (e.g. `"steps"`, `"heart_rate"`)
+  - `recordId` (Health Connect record identifier)
+  - `clientRecordId` (optional client record identifier when provided by source)
   - `origin` (e.g. `"com.mi.health"`)
   - `startTime`, `startZoneOffset`
   - `endTime`, `endZoneOffset`
@@ -85,11 +85,13 @@ To minimize payload clutter and produce clean, human-readable health exports, in
 
 ## 4. Common record format
 
-Every canonical record contains standard timing and origin metadata:
+Every canonical record contains standard timing, identifier, and origin metadata:
 
 ```json
 {
   "recordType": "steps",
+  "recordId": "rec_steps_golden_01",
+  "clientRecordId": "client_steps_01",
   "origin": "com.mi.health",
   "startTime": "2026-08-29T08:00:00Z",
   "startZoneOffset": "+03:00",
@@ -102,6 +104,8 @@ Every canonical record contains standard timing and origin metadata:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `recordType` | String | Yes | Canonical type identifier (`steps`, `heart_rate`, `distance`, `total_calories_burned`, `sleep_session`, `exercise_session`, `resting_heart_rate`, `oxygen_saturation`). |
+| `recordId` | String | No | Health Connect unique record identifier (e.g. `rec_steps_golden_01`). |
+| `clientRecordId` | String | No | Source client record identifier if supplied by the recording app. |
 | `origin` | String | Yes | Android package name of the app that inserted the record (e.g. `com.mi.health`). |
 | `startTime` | String | Yes | UTC ISO-8601 start timestamp. |
 | `startZoneOffset` | String | No | Zone offset at start (e.g. `"+03:00"`). |

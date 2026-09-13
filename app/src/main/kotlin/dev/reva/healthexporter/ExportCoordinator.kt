@@ -146,14 +146,29 @@ class ExportCoordinator(
             )
         }
 
-        val startInclusive = lastCheckpoint?.lastWindowEnd ?: now.minus(config.initialLookbackPeriod)
-        val maxDuration = config.maxBatchDuration
-        val endExclusive = if (maxDuration != null) {
-            val clamped = startInclusive.plus(maxDuration)
-            if (clamped.isBefore(now)) clamped else now
+        val localNow = now.atZone(zoneId)
+        val today = localNow.toLocalDate()
+
+        val startInclusive = if (lastCheckpoint != null) {
+            val checkpointInstant = lastCheckpoint.lastWindowEnd
+            val checkpointDate = checkpointInstant.atZone(zoneId).toLocalDate()
+            val dayStart = checkpointDate.atStartOfDay(zoneId).toInstant()
+            if (checkpointInstant == dayStart || checkpointInstant == checkpointDate.plusDays(1).atStartOfDay(zoneId).toInstant()) {
+                checkpointInstant
+            } else {
+                dayStart
+            }
         } else {
-            now
+            val lookbackDays = maxOf(1L, (config.initialLookbackPeriod.toHours() + 23) / 24)
+            today.minusDays(lookbackDays).atStartOfDay(zoneId).toInstant()
         }
+
+        val startDate = startInclusive.atZone(zoneId).toLocalDate()
+        val maxDuration = config.maxBatchDuration
+        val maxDays = if (maxDuration != null) maxOf(1L, (maxDuration.toHours() + 23) / 24) else null
+        val targetEndDate = if (maxDays != null) startDate.plusDays(maxDays) else today.plusDays(1)
+        val endDate = if (targetEndDate.isAfter(today.plusDays(1))) today.plusDays(1) else targetEndDate
+        val endExclusive = endDate.atStartOfDay(zoneId).toInstant()
 
         if (!startInclusive.isBefore(endExclusive)) {
             return Pair(
@@ -203,8 +218,16 @@ class ExportCoordinator(
     ): ExportBatch {
         val deduplicated = ExportRecordCanonicalizer.canonicalize(rawRecords)
         val installationId = stateStore.getInstallationId()
-        val batchId = idGenerator.generateId()
         val recordTypes = deduplicated.map { it.recordType }.distinct().sorted()
+
+        val startDate = timeWindow.startInclusive.atZone(zoneId).toLocalDate()
+        val isSingleDay = localDayWindow(startDate, zoneId) == timeWindow
+        val accountId = (destination as? GoogleDriveDestination)?.driveGateway?.accountId
+        val snapshotKey = if (isSingleDay) dailySnapshotKey(destination.destinationName, accountId, zoneId, startDate) else null
+        val batchId = snapshotKey?.identity ?: idGenerator.generateId()
+        val exportDate = if (isSingleDay) startDate.toString() else null
+        val exportTimezone = if (isSingleDay) zoneId.id else null
+        val dailyIdentity = snapshotKey?.identity
 
         val header = BatchHeader(
             schemaVersion = BatchHeader.CURRENT_SCHEMA_VERSION,
@@ -214,6 +237,9 @@ class ExportCoordinator(
             timeWindow = timeWindow,
             recordCount = deduplicated.size,
             recordTypes = recordTypes,
+            exportDate = exportDate,
+            exportTimezone = exportTimezone,
+            dailyIdentity = dailyIdentity,
         )
 
         return ExportBatch(

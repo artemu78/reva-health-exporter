@@ -169,7 +169,7 @@ class HealthRecordMapperTest {
         )
         val json = serializer.serializeToJson(batch)
         assertEquals(false, json.contains("\"clientRecordVersion\""))
-        assertEquals(false, json.contains("\"clientRecordId\""))
+        assertEquals(true, json.contains("\"clientRecordId\""))
     }
 
     @Test

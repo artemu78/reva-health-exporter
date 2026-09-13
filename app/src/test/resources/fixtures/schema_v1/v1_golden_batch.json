@@ -22,6 +22,7 @@
   "records": [
     {
       "recordType": "sleep_session",
+      "recordId": "rec_sleep_golden_01",
       "origin": "com.mi.health",
       "startTime": "2026-08-29T00:30:00Z",
       "startZoneOffset": "+03:00",
@@ -48,6 +49,7 @@
     },
     {
       "recordType": "distance",
+      "recordId": "rec_dist_golden_01",
       "origin": "com.mi.health",
       "startTime": "2026-08-29T08:00:00Z",
       "startZoneOffset": "+03:00",
@@ -57,6 +59,7 @@
     },
     {
       "recordType": "heart_rate",
+      "recordId": "rec_hr_golden_01",
       "origin": "com.mi.health",
       "startTime": "2026-08-29T08:00:00Z",
       "startZoneOffset": "+03:00",
@@ -75,6 +78,8 @@
     },
     {
       "recordType": "steps",
+      "recordId": "rec_steps_golden_01",
+      "clientRecordId": "client_steps_01",
       "origin": "com.mi.health",
       "startTime": "2026-08-29T08:00:00Z",
       "startZoneOffset": "+03:00",
@@ -84,6 +89,7 @@
     },
     {
       "recordType": "total_calories_burned",
+      "recordId": "rec_cal_golden_01",
       "origin": "com.mi.health",
       "startTime": "2026-08-29T08:00:00Z",
       "startZoneOffset": "+03:00",
@@ -93,6 +99,7 @@
     },
     {
       "recordType": "exercise_session",
+      "recordId": "rec_ex_golden_01",
       "origin": "com.mi.health",
       "startTime": "2026-08-29T18:00:00Z",
       "startZoneOffset": "+03:00",

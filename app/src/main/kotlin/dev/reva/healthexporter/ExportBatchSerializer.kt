@@ -171,6 +171,8 @@ open class ExportBatchSerializer {
 
     private fun CanonicalRecord.toJson(): JsonObject = JsonObject().apply {
         addProperty("recordType", recordType)
+        metadata.recordId?.let { addProperty("recordId", it) }
+        metadata.clientRecordId?.let { addProperty("clientRecordId", it) }
         addProperty("origin", metadata.origin)
         addProperty("startTime", startTime.toString())
         startZoneOffset?.let { addProperty("startZoneOffset", it.toString()) }

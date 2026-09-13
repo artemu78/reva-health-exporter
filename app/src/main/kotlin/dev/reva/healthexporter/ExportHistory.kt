@@ -302,7 +302,7 @@ class ManualBackfillCoordinator(
         val emptyDates = mutableListOf<LocalDate>()
         for (date in dates.distinct().sorted()) {
             val day = localDayWindow(date, zoneId)
-            when (val result = uploadWindow(day, zoneId)) {
+            when (val result = uploadWindow(day, zoneId, date)) {
                 is WindowUploadResult.Confirmed -> {
                     confirmed += result.entry
                     onDateCompleted?.invoke(date, true)
@@ -320,10 +320,12 @@ class ManualBackfillCoordinator(
         return summarizeBackfill(confirmed, emptyDates)
     }
 
-    private suspend fun uploadWindow(window: TimeWindow, zoneId: ZoneId): WindowUploadResult {
-        val batchId = stableBackfillBatchId(destinationKey, window)
+    private suspend fun uploadWindow(window: TimeWindow, zoneId: ZoneId, date: LocalDate): WindowUploadResult {
+        val accountId = (destination as? GoogleDriveDestination)?.driveGateway?.accountId
+        val snapshotKey = dailySnapshotKey(destination.destinationName, accountId, zoneId, date)
+        val batchId = snapshotKey.identity
         val now = clock.now(zoneId).toInstant()
-        val batch = when (val preparation = prepareBatch(batchId, window, now)) {
+        val batch = when (val preparation = prepareBatch(snapshotKey, window, now)) {
             is BatchPreparation.Ready -> preparation.batch
             BatchPreparation.Empty -> return WindowUploadResult.Empty
             is BatchPreparation.Stopped -> return WindowUploadResult.Stopped(preparation.result)
@@ -333,7 +335,12 @@ class ManualBackfillCoordinator(
         return classifyUpload(destination.upload(batch), pending, zoneId)
     }
 
-    private suspend fun prepareBatch(batchId: String, window: TimeWindow, now: Instant): BatchPreparation {
+    private suspend fun prepareBatch(
+        snapshotKey: DailySnapshotKey,
+        window: TimeWindow,
+        now: Instant,
+    ): BatchPreparation {
+        val batchId = snapshotKey.identity
         pendingStore.get(destinationKey, batchId)?.let { return BatchPreparation.Ready(it) }
         val records = when (val read = readRecords(window)) {
             is RecordReadResult.Success -> read.records
@@ -342,7 +349,7 @@ class ManualBackfillCoordinator(
             )
         }
         if (records.isEmpty()) return BatchPreparation.Empty
-        val batch = buildBatch(batchId, window, now, records)
+        val batch = buildBatch(snapshotKey, now, records)
         pendingStore.save(destinationKey, batch)
         return BatchPreparation.Ready(batch)
     }
@@ -360,18 +367,15 @@ class ManualBackfillCoordinator(
     }
 
     private fun buildBatch(
-        batchId: String,
-        window: TimeWindow,
+        snapshotKey: DailySnapshotKey,
         now: Instant,
         records: List<CanonicalRecord>,
     ): ExportBatch = ExportBatch(
-        BatchHeader(
+        dailySnapshotHeader(
             installationId = exportStateStore.getInstallationId(),
-            batchId = batchId,
+            key = snapshotKey,
             createdAt = now,
-            timeWindow = window,
-            recordCount = records.size,
-            recordTypes = records.map { it.recordType }.distinct().sorted(),
+            records = records,
         ),
         records,
     )
