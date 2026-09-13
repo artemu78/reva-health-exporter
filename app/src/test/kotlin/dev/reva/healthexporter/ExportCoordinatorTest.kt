@@ -3,6 +3,7 @@ package dev.reva.healthexporter
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -76,17 +77,22 @@ class ExportCoordinatorTest {
         initialLookback: Duration = Duration.ofDays(1),
         maxBatchDuration: Duration? = Duration.ofDays(1),
         exportStateStore: ExportStateStore = stateStore,
+        zoneId: ZoneId = ZoneOffset.UTC,
     ): ExportCoordinator = ExportCoordinator(
         stateStore = exportStateStore,
         recordReader = reader,
         destination = destination,
         clock = clock,
+        zoneId = zoneId,
         idGenerator = idGen,
         config = ExportCoordinatorConfig(
             initialLookbackPeriod = initialLookback,
             maxBatchDuration = maxBatchDuration,
         ),
     )
+
+    private fun expectedDailyBatchId(date: String = "2026-08-29", zoneId: ZoneId = ZoneOffset.UTC): String =
+        dailySnapshotKey(destination.destinationName, null, zoneId, LocalDate.parse(date)).identity
 
     private fun createSampleRecord(
         id: String,
@@ -126,7 +132,7 @@ class ExportCoordinatorTest {
     @Test
     fun initialExportCreatesBatchPersistsPendingUploadsAndAdvancesCheckpoint() = runBlocking {
         val coordinator = createCoordinator()
-        idGen.nextId = "batch-001"
+        val expectedBatchId = expectedDailyBatchId("2026-08-29")
 
         val record1 = createSampleRecord("r-1", Instant.parse("2026-08-29T14:00:00Z"))
         val record2 = createSampleRecord("r-2", Instant.parse("2026-08-29T16:00:00Z"))
@@ -136,18 +142,18 @@ class ExportCoordinatorTest {
         assertTrue("Result should be success: $result", result is ExportCycleResult.Success)
         val success = result as ExportCycleResult.Success
         assertFalse("Initial export should not be a retry", success.isRetry)
-        assertEquals("batch-001", success.batch.header.batchId)
+        assertEquals(expectedBatchId, success.batch.header.batchId)
         assertEquals(2, success.batch.header.recordCount)
 
         // Verify destination received the batch
         assertEquals(1, destination.uploadedBatches.size)
-        assertEquals("batch-001", destination.uploadedBatches.first().header.batchId)
+        assertEquals(expectedBatchId, destination.uploadedBatches.first().header.batchId)
 
         // Verify checkpoint advanced
         val checkpoint = stateStore.getLastCheckpoint()
         assertNotNull(checkpoint)
-        assertEquals("batch-001", checkpoint!!.lastBatchId)
-        assertEquals(Instant.parse("2026-08-30T12:00:00Z"), checkpoint.lastWindowEnd)
+        assertEquals(expectedBatchId, checkpoint!!.lastBatchId)
+        assertEquals(Instant.parse("2026-08-30T00:00:00Z"), checkpoint.lastWindowEnd)
         assertEquals(2L, checkpoint.totalRecordCount)
 
         // Verify pending batch was cleared
@@ -159,37 +165,38 @@ class ExportCoordinatorTest {
         val coordinator = createCoordinator()
 
         // 1. Initial export
-        idGen.nextId = "batch-001"
+        val expectedBatch1 = expectedDailyBatchId("2026-08-29")
         reader.recordsToReturn = mutableListOf(createSampleRecord("r-1", Instant.parse("2026-08-29T14:00:00Z")))
         coordinator.export()
 
         val cp1 = stateStore.getLastCheckpoint()
-        assertEquals(Instant.parse("2026-08-30T12:00:00Z"), cp1!!.lastWindowEnd)
+        assertEquals(Instant.parse("2026-08-30T00:00:00Z"), cp1!!.lastWindowEnd)
+        assertEquals(expectedBatch1, cp1.lastBatchId)
 
         // 2. Advance time by 6 hours
         clock.currentInstant = Instant.parse("2026-08-30T18:00:00Z")
-        idGen.nextId = "batch-002"
+        val expectedBatch2 = expectedDailyBatchId("2026-08-30")
         reader.recordsToReturn = mutableListOf(createSampleRecord("r-2", Instant.parse("2026-08-30T14:00:00Z")))
 
         val result2 = coordinator.export()
         assertTrue(result2 is ExportCycleResult.Success)
         val success2 = result2 as ExportCycleResult.Success
-        assertEquals("batch-002", success2.batch.header.batchId)
+        assertEquals(expectedBatch2, success2.batch.header.batchId)
 
         // Verify query window started at previous checkpoint end
-        assertEquals(Instant.parse("2026-08-30T12:00:00Z"), reader.lastQueriedWindow?.startInclusive)
-        assertEquals(Instant.parse("2026-08-30T18:00:00Z"), reader.lastQueriedWindow?.endExclusive)
+        assertEquals(Instant.parse("2026-08-30T00:00:00Z"), reader.lastQueriedWindow?.startInclusive)
+        assertEquals(Instant.parse("2026-08-31T00:00:00Z"), reader.lastQueriedWindow?.endExclusive)
 
         // Verify total record count accumulated
         val cp2 = stateStore.getLastCheckpoint()
         assertEquals(2L, cp2!!.totalRecordCount)
-        assertEquals("batch-002", cp2.lastBatchId)
+        assertEquals(expectedBatch2, cp2.lastBatchId)
     }
 
     @Test
     fun retryReusesPendingBatchIdentityAndContentsWithoutQueryingHealthConnect() = runBlocking {
         val coordinator = createCoordinator()
-        idGen.nextId = "batch-retry-001"
+        val expectedBatchId = expectedDailyBatchId("2026-08-29")
 
         val originalRecord = createSampleRecord("r-orig", Instant.parse("2026-08-29T14:00:00Z"))
         reader.recordsToReturn = mutableListOf(originalRecord)
@@ -204,7 +211,7 @@ class ExportCoordinatorTest {
         assertNull("Checkpoint must not advance on failure", stateStore.getLastCheckpoint())
         val pendingBatch = stateStore.getPendingBatch()
         assertNotNull("Pending batch must be persisted", pendingBatch)
-        assertEquals("batch-retry-001", pendingBatch!!.header.batchId)
+        assertEquals(expectedBatchId, pendingBatch!!.header.batchId)
         assertEquals(1, pendingBatch.records.size)
 
         // 2. Modify reader and idGen to prove they are NOT used during retry
@@ -218,13 +225,13 @@ class ExportCoordinatorTest {
         assertTrue(retryResult is ExportCycleResult.Success)
         val success = retryResult as ExportCycleResult.Success
         assertTrue("Should be marked as retry", success.isRetry)
-        assertEquals("batch-retry-001", success.batch.header.batchId)
+        assertEquals(expectedBatchId, success.batch.header.batchId)
         assertEquals("r-orig", success.batch.records.first().metadata.recordId)
 
         // Verify checkpoint advanced with original batchId
         val cp = stateStore.getLastCheckpoint()
         assertNotNull(cp)
-        assertEquals("batch-retry-001", cp!!.lastBatchId)
+        assertEquals(expectedBatchId, cp!!.lastBatchId)
         assertNull(stateStore.getPendingBatch())
     }
 
@@ -288,7 +295,7 @@ class ExportCoordinatorTest {
     @Test
     fun failureDuringCheckpointSaveRetainsPendingBatchForNextRun() = runBlocking {
         val coordinator = createCoordinator()
-        idGen.nextId = "batch-cp-fail-001"
+        val expectedBatchId = expectedDailyBatchId("2026-08-29")
         reader.recordsToReturn = mutableListOf(createSampleRecord("r-1", Instant.parse("2026-08-29T14:00:00Z")))
         stateStore.failOnSaveCheckpoint = IllegalStateException("Checkpoint disk error")
 
@@ -297,14 +304,14 @@ class ExportCoordinatorTest {
 
         // Upload succeeded, but checkpoint failed: pending batch must remain for retry
         assertNotNull(stateStore.getPendingBatch())
-        assertEquals("batch-cp-fail-001", stateStore.getPendingBatch()?.header?.batchId)
+        assertEquals(expectedBatchId, stateStore.getPendingBatch()?.header?.batchId)
         assertNull(stateStore.getLastCheckpoint())
 
         // Next run succeeds when checkpoint failure is resolved
         stateStore.failOnSaveCheckpoint = null
         val result2 = coordinator.export()
         assertTrue(result2 is ExportCycleResult.Success)
-        assertEquals("batch-cp-fail-001", stateStore.getLastCheckpoint()?.lastBatchId)
+        assertEquals(expectedBatchId, stateStore.getLastCheckpoint()?.lastBatchId)
         assertNull(stateStore.getPendingBatch())
     }
 
@@ -324,7 +331,15 @@ class ExportCoordinatorTest {
     @Test
     fun concurrentExportTriggersAreSynchronizedWithoutDuplicateBatches() = runBlocking {
         val coordinator = createCoordinator()
-        reader.recordsToReturn = mutableListOf(createSampleRecord("r-concurrent", Instant.parse("2026-08-29T14:00:00Z")))
+        stateStore.saveCheckpoint(
+            ExportCheckpoint(
+                lastWindowEnd = Instant.parse("2026-08-30T00:00:00Z"),
+                lastBatchId = "batch-prev",
+                exportedAt = Instant.parse("2026-08-30T00:01:00Z"),
+                totalRecordCount = 0L,
+            ),
+        )
+        reader.recordsToReturn = mutableListOf(createSampleRecord("r-concurrent", Instant.parse("2026-08-30T14:00:00Z")))
 
         // Trigger two concurrent exports
         val results = coroutineScope {
@@ -389,20 +404,20 @@ class ExportCoordinatorTest {
     @Test
     fun emptyRecordsProduceValidEmptyBatchAndAdvanceCheckpoint() = runBlocking {
         val coordinator = createCoordinator()
-        idGen.nextId = "empty-batch-001"
+        val expectedBatchId = expectedDailyBatchId("2026-08-29")
         reader.recordsToReturn = mutableListOf()
 
         val result = coordinator.export()
         assertTrue(result is ExportCycleResult.Success)
         val success = result as ExportCycleResult.Success
-        assertEquals("empty-batch-001", success.batch.header.batchId)
+        assertEquals(expectedBatchId, success.batch.header.batchId)
         assertEquals(0, success.batch.header.recordCount)
         assertTrue(success.batch.header.recordTypes.isEmpty())
         assertTrue(success.batch.records.isEmpty())
 
         val cp = stateStore.getLastCheckpoint()
         assertNotNull(cp)
-        assertEquals("empty-batch-001", cp!!.lastBatchId)
+        assertEquals(expectedBatchId, cp!!.lastBatchId)
         assertEquals(0L, cp.totalRecordCount)
         assertNull(stateStore.getPendingBatch())
     }
@@ -414,19 +429,20 @@ class ExportCoordinatorTest {
             initialLookback = Duration.ofDays(7),
             maxBatchDuration = Duration.ofDays(1),
         )
-        idGen.nextId = "clamped-batch-001"
+        val expectedBatchId = expectedDailyBatchId("2026-08-23")
         reader.recordsToReturn = mutableListOf()
 
         val result = coordinator.export()
         assertTrue(result is ExportCycleResult.Success)
         val success = result as ExportCycleResult.Success
 
-        // Window should be clamped to 1 day: [2026-08-23T12:00:00Z, 2026-08-24T12:00:00Z)
-        assertEquals(Instant.parse("2026-08-23T12:00:00Z"), success.batch.header.timeWindow.startInclusive)
-        assertEquals(Instant.parse("2026-08-24T12:00:00Z"), success.batch.header.timeWindow.endExclusive)
+        // Window should be clamped to 1 day: [2026-08-23T00:00:00Z, 2026-08-24T00:00:00Z)
+        assertEquals(Instant.parse("2026-08-23T00:00:00Z"), success.batch.header.timeWindow.startInclusive)
+        assertEquals(Instant.parse("2026-08-24T00:00:00Z"), success.batch.header.timeWindow.endExclusive)
+        assertEquals(expectedBatchId, success.batch.header.batchId)
 
         val cp = stateStore.getLastCheckpoint()
-        assertEquals(Instant.parse("2026-08-24T12:00:00Z"), cp!!.lastWindowEnd)
+        assertEquals(Instant.parse("2026-08-24T00:00:00Z"), cp!!.lastWindowEnd)
     }
 
     @Test
@@ -436,39 +452,43 @@ class ExportCoordinatorTest {
             maxBatchDuration = Duration.ofDays(1),
         )
 
-        // Day 1
-        idGen.nextId = "seq-01"
+        // Day 1: 2026-08-27
         reader.recordsToReturn = mutableListOf(createSampleRecord("r-d1", Instant.parse("2026-08-27T14:00:00Z")))
         val r1 = coordinator.export()
         assertTrue(r1 is ExportCycleResult.Success)
-        assertEquals(Instant.parse("2026-08-28T12:00:00Z"), stateStore.getLastCheckpoint()?.lastWindowEnd)
+        assertEquals(Instant.parse("2026-08-28T00:00:00Z"), stateStore.getLastCheckpoint()?.lastWindowEnd)
         assertEquals(1L, stateStore.getLastCheckpoint()?.totalRecordCount)
 
-        // Day 2
-        idGen.nextId = "seq-02"
+        // Day 2: 2026-08-28
         reader.recordsToReturn = mutableListOf(createSampleRecord("r-d2", Instant.parse("2026-08-28T14:00:00Z")))
         val r2 = coordinator.export()
         assertTrue(r2 is ExportCycleResult.Success)
-        assertEquals(Instant.parse("2026-08-29T12:00:00Z"), stateStore.getLastCheckpoint()?.lastWindowEnd)
+        assertEquals(Instant.parse("2026-08-29T00:00:00Z"), stateStore.getLastCheckpoint()?.lastWindowEnd)
         assertEquals(2L, stateStore.getLastCheckpoint()?.totalRecordCount)
 
-        // Day 3
-        idGen.nextId = "seq-03"
+        // Day 3: 2026-08-29
         reader.recordsToReturn = mutableListOf(createSampleRecord("r-d3", Instant.parse("2026-08-29T14:00:00Z")))
         val r3 = coordinator.export()
         assertTrue(r3 is ExportCycleResult.Success)
-        assertEquals(Instant.parse("2026-08-30T12:00:00Z"), stateStore.getLastCheckpoint()?.lastWindowEnd)
+        assertEquals(Instant.parse("2026-08-30T00:00:00Z"), stateStore.getLastCheckpoint()?.lastWindowEnd)
         assertEquals(3L, stateStore.getLastCheckpoint()?.totalRecordCount)
 
-        // Up to date (now = 2026-08-30T12:00:00Z, checkpoint = 2026-08-30T12:00:00Z)
+        // Day 4: 2026-08-30 (today)
+        reader.recordsToReturn = mutableListOf(createSampleRecord("r-d4", Instant.parse("2026-08-30T14:00:00Z")))
         val r4 = coordinator.export()
-        assertTrue(r4 is ExportCycleResult.NothingToExport)
+        assertTrue(r4 is ExportCycleResult.Success)
+        assertEquals(Instant.parse("2026-08-31T00:00:00Z"), stateStore.getLastCheckpoint()?.lastWindowEnd)
+        assertEquals(4L, stateStore.getLastCheckpoint()?.totalRecordCount)
+
+        // Up to date (now = 2026-08-30T12:00:00Z, checkpoint = 2026-08-31T00:00:00Z)
+        val r5 = coordinator.export()
+        assertTrue(r5 is ExportCycleResult.NothingToExport)
     }
 
     @Test
     fun destinationUploadThrowsUnexpectedExceptionHandledGracefully() = runBlocking {
         val coordinator = createCoordinator()
-        idGen.nextId = "batch-exc-001"
+        val expectedBatchId = expectedDailyBatchId("2026-08-29")
         reader.recordsToReturn = mutableListOf(createSampleRecord("r-1", Instant.parse("2026-08-29T14:00:00Z")))
         destination.uploadThrowException = RuntimeException("Unexpected socket crash")
 
@@ -479,7 +499,7 @@ class ExportCoordinatorTest {
 
         // Invariant: pending batch is preserved, checkpoint is not advanced
         assertNotNull(stateStore.getPendingBatch())
-        assertEquals("batch-exc-001", stateStore.getPendingBatch()?.header?.batchId)
+        assertEquals(expectedBatchId, stateStore.getPendingBatch()?.header?.batchId)
         assertNull(stateStore.getLastCheckpoint())
     }
 
@@ -512,14 +532,14 @@ class ExportCoordinatorTest {
 
     @Test
     fun nonRetryableUploadFailurePreservesPendingBatchAndCheckpoint() = runBlocking {
-        idGen.nextId = "batch-auth-revoked"
+        val expectedBatchId = expectedDailyBatchId("2026-08-29")
         destination.uploadResult = UploadResult.Failure("Drive authorization revoked", isRetryable = false)
 
         val result = createCoordinator().export()
 
         assertTrue(result is ExportCycleResult.TerminalFailure)
-        assertEquals("batch-auth-revoked", (result as ExportCycleResult.TerminalFailure).batch?.header?.batchId)
-        assertEquals("batch-auth-revoked", stateStore.getPendingBatch()?.header?.batchId)
+        assertEquals(expectedBatchId, (result as ExportCycleResult.TerminalFailure).batch?.header?.batchId)
+        assertEquals(expectedBatchId, stateStore.getPendingBatch()?.header?.batchId)
         assertNull(stateStore.getLastCheckpoint())
     }
 
@@ -536,7 +556,7 @@ class ExportCoordinatorTest {
     }
 
     @Test
-    fun unlimitedBatchDurationUsesCurrentTimeAsWindowEnd() = runBlocking {
+    fun unlimitedBatchDurationExportsFullBacklogThroughCurrentDayBound() = runBlocking {
         val result = createCoordinator(
             initialLookback = Duration.ofDays(3),
             maxBatchDuration = null,
@@ -544,7 +564,7 @@ class ExportCoordinatorTest {
 
         assertTrue(result is ExportCycleResult.Success)
         assertEquals(
-            Instant.parse("2026-08-30T12:00:00Z"),
+            Instant.parse("2026-08-31T00:00:00Z"),
             (result as ExportCycleResult.Success).batch.header.timeWindow.endExclusive,
         )
     }

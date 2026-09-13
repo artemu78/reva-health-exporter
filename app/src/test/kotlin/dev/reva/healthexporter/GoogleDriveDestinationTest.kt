@@ -1,6 +1,7 @@
 package dev.reva.healthexporter
 
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -449,23 +450,25 @@ class GoogleDriveDestinationTest {
             recordReader = reader,
             destination = destination,
             clock = testClock,
+            zoneId = ZoneOffset.UTC,
             idGenerator = { "batch-coord-drive-01" },
         )
 
         val result = coordinator.export()
         assertTrue(result is ExportCycleResult.Success)
         val success = result as ExportCycleResult.Success
-        assertEquals("batch-coord-drive-01", success.batch.header.batchId)
+        val expectedBatchId = dailySnapshotKey(destination.destinationName, gateway.accountId, ZoneOffset.UTC, LocalDate.parse("2026-08-29")).identity
+        assertEquals(expectedBatchId, success.batch.header.batchId)
 
         // Verify file in Drive
         val driveFiles = gateway.files.filter { it.mimeType == "application/json" }
         assertEquals(1, driveFiles.size)
-        assertEquals("batch-coord-drive-01", driveFiles.first().appProperties["batchId"])
+        assertEquals(expectedBatchId, driveFiles.first().appProperties["batchId"])
 
         // Verify checkpoint advanced
         val cp = stateStore.getLastCheckpoint()
         assertNotNull(cp)
-        assertEquals("batch-coord-drive-01", cp!!.lastBatchId)
+        assertEquals(expectedBatchId, cp!!.lastBatchId)
         assertEquals(1L, cp.totalRecordCount)
         assertNull(stateStore.getPendingBatch())
     }
@@ -501,6 +504,7 @@ class GoogleDriveDestinationTest {
             recordReader = reader,
             destination = destination,
             clock = testClock,
+            zoneId = ZoneOffset.UTC,
             idGenerator = { "batch-coord-fail-01" },
         )
 
@@ -510,10 +514,11 @@ class GoogleDriveDestinationTest {
         // Invariant: checkpoint must NOT advance
         assertNull(stateStore.getLastCheckpoint())
 
+        val expectedBatchId = dailySnapshotKey(destination.destinationName, gateway.accountId, ZoneOffset.UTC, LocalDate.parse("2026-08-29")).identity
         // Invariant: pending batch must be preserved for retry
         val pending = stateStore.getPendingBatch()
         assertNotNull(pending)
-        assertEquals("batch-coord-fail-01", pending!!.header.batchId)
+        assertEquals(expectedBatchId, pending!!.header.batchId)
 
         // Now fix network and retry: should succeed with SAME batch ID
         gateway.failOnUploadFile = null
@@ -521,12 +526,12 @@ class GoogleDriveDestinationTest {
         assertTrue(retryResult is ExportCycleResult.Success)
         val success = retryResult as ExportCycleResult.Success
         assertTrue(success.isRetry)
-        assertEquals("batch-coord-fail-01", success.batch.header.batchId)
+        assertEquals(expectedBatchId, success.batch.header.batchId)
 
         // Checkpoint now advances
         val cp = stateStore.getLastCheckpoint()
         assertNotNull(cp)
-        assertEquals("batch-coord-fail-01", cp!!.lastBatchId)
+        assertEquals(expectedBatchId, cp!!.lastBatchId)
         assertNull(stateStore.getPendingBatch())
     }
 }

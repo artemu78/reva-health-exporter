@@ -156,9 +156,9 @@ class ExportBatchSerializerTest {
             assertEquals(expected.metadata.origin, actual.metadata.origin)
             assertEquals(expected.startTime, actual.startTime)
             assertEquals(expected.endTime, actual.endTime)
-            org.junit.Assert.assertNull(actual.metadata.recordId)
+            assertEquals(expected.metadata.recordId, actual.metadata.recordId)
             org.junit.Assert.assertNull(actual.metadata.device)
-            org.junit.Assert.assertNull(actual.metadata.clientRecordId)
+            assertEquals(expected.metadata.clientRecordId, actual.metadata.clientRecordId)
         }
     }
 
@@ -219,7 +219,8 @@ class ExportBatchSerializerTest {
             val actual = parsedFromGzip.records.first { it.recordType == expected.recordType && it.startTime == expected.startTime }
             assertEquals(expected.recordType, actual.recordType)
             assertEquals(expected.metadata.origin, actual.metadata.origin)
-            org.junit.Assert.assertNull(actual.metadata.recordId)
+            assertEquals(expected.metadata.recordId, actual.metadata.recordId)
+            assertEquals(expected.metadata.clientRecordId, actual.metadata.clientRecordId)
         }
     }
 
@@ -363,9 +364,9 @@ class ExportBatchSerializerTest {
             assertEquals(expected.startZoneOffset, actual.startZoneOffset)
             assertEquals(expected.endTime, actual.endTime)
             assertEquals(expected.endZoneOffset, actual.endZoneOffset)
-            org.junit.Assert.assertNull(actual.metadata.recordId)
+            assertEquals(expected.metadata.recordId, actual.metadata.recordId)
             org.junit.Assert.assertNull(actual.metadata.device)
-            org.junit.Assert.assertNull(actual.metadata.clientRecordId)
+            assertEquals(expected.metadata.clientRecordId, actual.metadata.clientRecordId)
             org.junit.Assert.assertNull(actual.metadata.recordingMethod)
         }
     }
@@ -411,21 +412,21 @@ class ExportBatchSerializerTest {
 
         // Metadata and provenance fields that must be stripped from JSON records
         assertFalse("Output JSON must not contain 'device' key", json.contains("\"device\""))
-        assertFalse("Output JSON must not contain 'recordId' key", json.contains("\"recordId\""))
-        assertFalse("Output JSON must not contain 'clientRecordId' key", json.contains("\"clientRecordId\""))
         assertFalse("Output JSON must not contain 'recordingMethod' key", json.contains("\"recordingMethod\""))
         assertFalse("Output JSON must not contain 'clientRecordVersion' key", json.contains("\"clientRecordVersion\""))
         assertFalse("Output JSON must not contain 'lastModifiedTime' key", json.contains("\"lastModifiedTime\""))
         assertFalse("Output JSON must not contain 'manufacturer'", json.contains("Xiaomi"))
         assertFalse("Output JSON must not contain 'model'", json.contains("Smart Band 9"))
 
-        // Essential header and timing/origin fields must be preserved
+        // Essential header and timing/origin/identifier fields must be preserved
         assertTrue("Output JSON must contain 'schemaVersion'", json.contains("\"schemaVersion\":1"))
         assertTrue("Output JSON must contain 'installationId'", json.contains("\"installationId\":\"inst-pseudo-uuid-1\""))
         assertTrue("Output JSON must contain 'batchId'", json.contains("\"batchId\":\"batch-uuid-001\""))
         assertTrue("Output JSON must contain 'origin'", json.contains("\"origin\":\"com.mi.health\""))
         assertTrue("Output JSON must contain 'startTime'", json.contains("\"startTime\":\"2026-08-29T08:00:00Z\""))
         assertTrue("Output JSON must contain 'count'", json.contains("\"count\":1500"))
+        assertTrue("Output JSON must contain 'recordId'", json.contains("\"recordId\":\"rec-steps-1\""))
+        assertTrue("Output JSON must contain 'clientRecordId'", json.contains("\"clientRecordId\":\"client-rec-001\""))
     }
 
     @Test
