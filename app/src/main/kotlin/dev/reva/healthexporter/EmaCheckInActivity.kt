@@ -30,7 +30,7 @@ class EmaCheckInActivity : ComponentActivity() {
 
     private lateinit var eventId: String
     private lateinit var store: EmaEventStore
-    private var selectedActivity: String? = null
+    private var selectedActivity: EmaActivityCategory? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,7 +81,8 @@ class EmaCheckInActivity : ComponentActivity() {
             })
         }
         group.setOnCheckedChangeListener { radioGroup, checkedId ->
-            selectedActivity = radioGroup.findViewById<RadioButton>(checkedId)?.tag as? String
+            val selectedId = radioGroup.findViewById<RadioButton>(checkedId)?.tag as? String
+            selectedActivity = categories.firstOrNull { it.id == selectedId }
             findViewById<Button>(R.id.ema_submit).isEnabled = selectedActivity != null
         }
     }
@@ -97,7 +98,8 @@ class EmaCheckInActivity : ComponentActivity() {
                 focus = findViewById<SeekBar>(R.id.ema_focus).progress,
                 stress = findViewById<SeekBar>(R.id.ema_stress).progress,
             ),
-            activity = activity,
+            activity = activity.id,
+            activityLabel = activity.label,
             note = findViewById<EditText>(R.id.ema_note).text.toString(),
         )
         if (saved) notificationFactory(this).cancel(eventId)

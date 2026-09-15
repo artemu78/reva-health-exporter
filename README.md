@@ -41,6 +41,8 @@ uses four 1–5 sliders, one activity choice, and an optional short note. Dismis
 unanswered prompts are retained as response-status data when Android makes that distinction available.
 
 See [Experience-sampling check-ins](docs/ema-check-ins.md) for scheduling, schema, storage, and privacy details.
+Programs that consume raw event files should use the
+[EMA Event File Protocol v1](docs/ema-event-v1.md).
 
 ## Current status
 
@@ -185,4 +187,5 @@ Start here:
 - [Mi Fitness compatibility report](docs/mi-fitness-compatibility-report.md)
 - [Schema version 1 specification](docs/schema-v1.md)
 - [Experience-sampling check-ins](docs/ema-check-ins.md)
+- [EMA Event File Protocol v1](docs/ema-event-v1.md)
 - [Open issues](https://github.com/artemu78/reva-health-exporter/issues)

@@ -66,6 +66,7 @@ class EmaCheckInActivityTest {
         assertEquals(EmaResponseStatus.ANSWERED, event?.status)
         assertEquals(EmaAnswers(4, 2, 5, 1), event?.answers)
         assertEquals("work_coding", event?.activity)
+        assertEquals("Work / coding", event?.activityLabel)
         assertEquals(Instant.parse("2026-09-15T09:01:02.003Z"), event?.answeredAt)
     }
 }

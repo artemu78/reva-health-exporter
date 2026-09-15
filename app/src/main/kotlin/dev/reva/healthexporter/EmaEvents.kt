@@ -49,6 +49,7 @@ data class EmaEvent(
     val answeredAt: Instant?,
     val answers: EmaAnswers?,
     val activity: String?,
+    val activityLabel: String?,
     val note: String?,
     val status: EmaResponseStatus,
     val timezone: String,
@@ -67,6 +68,7 @@ data class EmaEvent(
             answeredAt = null,
             answers = null,
             activity = null,
+            activityLabel = null,
             note = null,
             status = EmaResponseStatus.PENDING,
             timezone = zoneId.id,
@@ -172,12 +174,14 @@ class EmaCheckInService(
         answers: EmaAnswers,
         activity: String,
         note: String?,
+        activityLabel: String? = null,
     ): Boolean = updatePending(eventId) { event ->
         require(activity.isNotBlank()) { "Activity is required" }
         event.copy(
             answeredAt = answeredAt,
             answers = answers,
             activity = activity,
+            activityLabel = activityLabel?.trim()?.ifBlank { null },
             note = note?.trim()?.take(280)?.ifBlank { null },
             status = EmaResponseStatus.ANSWERED,
         )
@@ -217,6 +221,7 @@ fun serializeEmaEvent(event: EmaEvent): String {
             }
         }
         event.activity?.let { addProperty("activity", it) }
+        event.activityLabel?.let { addProperty("activityLabel", it) }
         event.note?.let { addProperty("note", it) }
         addProperty("status", event.status.wireValue)
         addProperty("timezone", event.timezone)
@@ -250,6 +255,7 @@ fun deserializeEmaEvent(serialized: String): EmaEvent? {
             answeredAt = json.get("answeredAt")?.asString?.let(Instant::parse),
             answers = answers,
             activity = json.get("activity")?.asString,
+            activityLabel = json.get("activityLabel")?.asString,
             note = json.get("note")?.asString,
             status = status,
             timezone = json.get("timezone")?.asString ?: return null,

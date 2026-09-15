@@ -27,6 +27,7 @@ class EmaEventStoreTest {
             answeredAt = answeredAt,
             answers = EmaAnswers(mood = 4, energy = 2, focus = 3, stress = 4),
             activity = "work_coding",
+            activityLabel = "Work / coding",
             note = null,
         )
 
@@ -39,6 +40,7 @@ class EmaEventStoreTest {
         assertEquals(3, restored?.answers?.focus)
         assertEquals(4, restored?.answers?.stress)
         assertEquals("work_coding", restored?.activity)
+        assertEquals("Work / coding", restored?.activityLabel)
         assertNull(restored?.note)
         assertEquals(EmaResponseStatus.ANSWERED, restored?.status)
         assertEquals("Europe/Moscow", restored?.timezone)

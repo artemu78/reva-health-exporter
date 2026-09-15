@@ -3,6 +3,9 @@
 The app can collect brief subjective observations during the day. These observations are intentionally
 separate from Health Connect records and algorithmic scores from other products.
 
+Downstream consumers should follow the versioned
+[EMA Event File Protocol v1](ema-event-v1.md) and its machine-readable JSON Schema.
+
 ## Prompt schedule
 
 - The default active period is 09:00–22:00 in the phone's current timezone.
