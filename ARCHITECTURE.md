@@ -42,6 +42,9 @@ flowchart TB
     State["Local export state"]
     Scheduler["WorkManager scheduler"]
     Worker["Export worker"]
+    EmaScheduler["EMA schedule coordinator"]
+    EmaWorker["EMA prompt / expiry workers"]
+    EmaStore["Versioned subjective event store"]
 
     Destination["ExportDestination"]
     LocalDestination["Local file destination"]
@@ -57,6 +60,10 @@ flowchart TB
     Mapper --> Batch
     Worker <--> State
     Worker --> Destination
+    UI --> EmaScheduler
+    EmaScheduler --> EmaWorker
+    EmaWorker --> EmaStore
+    UI --> EmaStore
     Destination --> LocalDestination
     Destination --> DriveDestination
     Destination -. later .-> HttpDestination
@@ -74,6 +81,9 @@ flowchart TB
 | Immutable batch builder | Produce retry-safe NDJSON batches with stable metadata and no in-place append requirement. |
 | Local export state | Store checkpoints, batch status, destination configuration, and non-secret diagnostic state. |
 | WorkManager worker | Perform constrained periodic exports, retry transient failures, and surface authorization failures to the UI. |
+| EMA schedule coordinator | Generate separated semi-random prompt times and reconcile persistent one-time work. |
+| EMA prompt and expiry workers | Show one notification per scheduled observation and expire unanswered events without nagging. |
+| Subjective event store | Preserve versioned raw check-ins separately from Health Connect and derived metrics. |
 | Export destination | Keep storage-specific behavior outside the Health Connect pipeline. |
 
 ## Diagnostic phase
@@ -177,6 +187,7 @@ Google access is authorized interactively. If authorization is revoked or requir
 - HTTPS destinations must use TLS and must not embed permanent server or AWS credentials in the application.
 - Secrets and access tokens must not appear in source control, exported diagnostics, or ordinary logs.
 - Logs should contain counts, time windows, record types, and error categories rather than health values.
+- Subjective EMA values are stored separately from Health Connect records and derived third-party scores.
 - Deletion, retention, and optional client-side encryption require explicit product decisions before broader distribution.
 
 ## Failure behavior

@@ -2,6 +2,9 @@
 
 Reva Health Exporter is a small private Android 11 app for inspecting and exporting health data from a Xiaomi Smart Band 9.
 
+It also supports lightweight experience-sampling check-ins for mood, energy, focus, stress, and current
+activity. These subjective observations remain distinct from Health Connect and third-party derived metrics.
+
 ```text
 Smart Band 9 → Xiaomi Mi Fitness → Health Connect → Reva Health Exporter
                                                     ├─ local files
@@ -27,6 +30,17 @@ The first remote destination is a visible folder in the user's own Google Drive.
 - Google Drive exports belong to the signed-in user; the project does not operate a central health-data store.
 - Tests and repository fixtures use synthetic records only.
 - Credentials, tokens, and personal health exports must never be committed or logged.
+- Experience-sampling observations are stored in the app's private internal storage and are currently
+  local-only; clearing app storage or uninstalling removes them.
+
+## Experience sampling
+
+By default, the app schedules about five brief check-ins at semi-random times between 09:00 and 22:00.
+The Settings screen controls notifications, active hours, daily count, and activity choices. A check-in
+uses four 1–5 sliders, one activity choice, and an optional short note. Dismissed notifications and
+unanswered prompts are retained as response-status data when Android makes that distinction available.
+
+See [Experience-sampling check-ins](docs/ema-check-ins.md) for scheduling, schema, storage, and privacy details.
 
 ## Current status
 
@@ -170,4 +184,5 @@ Start here:
 - [Testing strategy](TESTING.md)
 - [Mi Fitness compatibility report](docs/mi-fitness-compatibility-report.md)
 - [Schema version 1 specification](docs/schema-v1.md)
+- [Experience-sampling check-ins](docs/ema-check-ins.md)
 - [Open issues](https://github.com/artemu78/reva-health-exporter/issues)
