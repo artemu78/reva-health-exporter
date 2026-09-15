@@ -58,6 +58,22 @@
       </LinearLayout>
       <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:id="@+id/matrix_preferences" android:visibility="gone">
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Settings &amp; diagnostics" android:textSize="20sp" android:textColor="#151D1D" android:textStyle="bold" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/matrix_card" android:orientation="vertical" android:padding="12dp">
+          <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ema_settings_title" android:textColor="#151D1D" android:textSize="17sp" android:textStyle="bold" />
+          <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/ema_settings_description" android:textColor="#3E4949" android:textSize="13sp" />
+          <Switch android:id="@+id/ema_enabled" android:layout_width="match_parent" android:layout_height="48dp" android:text="@string/ema_notifications_enabled" />
+          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+            <Button android:id="@+id/ema_active_start" android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1" android:textAllCaps="false" />
+            <Button android:id="@+id/ema_active_end" android:layout_width="0dp" android:layout_height="48dp" android:layout_marginStart="8dp" android:layout_weight="1" android:textAllCaps="false" />
+          </LinearLayout>
+          <TextView android:id="@+id/ema_count_value" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textColor="#151D1D" android:textSize="14sp" />
+          <SeekBar android:id="@+id/ema_count" android:layout_width="match_parent" android:layout_height="48dp" android:contentDescription="@string/ema_count_description" android:max="10" android:min="1" />
+          <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/ema_categories_title" android:textColor="#151D1D" android:textStyle="bold" />
+          <EditText android:id="@+id/ema_categories" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="@string/ema_categories_hint" android:inputType="textCapSentences|textMultiLine" android:maxLines="12" android:minLines="4" />
+          <Button android:id="@+id/ema_save_settings" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="8dp" android:text="@string/ema_save_settings" android:textAllCaps="false" />
+          <Button android:id="@+id/ema_check_in_now" android:layout_width="match_parent" android:layout_height="48dp" android:text="@string/ema_check_in_now" android:textAllCaps="false" />
+          <TextView android:id="@+id/ema_settings_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:accessibilityLiveRegion="polite" android:textColor="#3E4949" android:textSize="13sp" />
+        </LinearLayout>
         <TextView android:id="@+id/granted_permissions" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:visibility="gone" />
         <TextView android:id="@+id/missing_permissions" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:visibility="gone" />
         <RadioGroup android:id="@+id/diagnostic_time_window" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:contentDescription="@string/diagnostic_time_window_description" android:orientation="horizontal">

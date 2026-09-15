@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reva.dev/schemas/ema-event-v1.schema.json",
+  "title": "Reva EMA Event v1",
+  "description": "One raw experience-sampling event. Unknown properties are allowed for forward-compatible v1 extensions.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "scheduleDate",
+    "scheduledAt",
+    "status",
+    "timezone"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "scheduleDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "scheduledAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "answeredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "mood": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "energy": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "focus": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "stress": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "additionalAnswers": {
+      "type": "object",
+      "propertyNames": {
+        "not": {
+          "enum": ["mood", "energy", "focus", "stress"]
+        }
+      },
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
+    "activity": {
+      "type": "string",
+      "minLength": 1
+    },
+    "activityLabel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "note": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 280
+    },
+    "status": {
+      "enum": ["pending", "answered", "dismissed", "expired"]
+    },
+    "timezone": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "answered"
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "required": [
+          "answeredAt",
+          "mood",
+          "energy",
+          "focus",
+          "stress",
+          "activity"
+        ]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            { "required": ["answeredAt"] },
+            { "required": ["mood"] },
+            { "required": ["energy"] },
+            { "required": ["focus"] },
+            { "required": ["stress"] },
+            { "required": ["activity"] },
+            { "required": ["activityLabel"] },
+            { "required": ["note"] },
+            { "required": ["additionalAnswers"] }
+          ]
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}

@@ -149,6 +149,7 @@ class ApplicationContractTest {
         assertEquals(
             setOf(
                 "android.permission.INTERNET",
+                "android.permission.POST_NOTIFICATIONS",
                 "android.permission.health.READ_STEPS",
                 "android.permission.health.READ_HEART_RATE",
                 "android.permission.health.READ_RESTING_HEART_RATE",

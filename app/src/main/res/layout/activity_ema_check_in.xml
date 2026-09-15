@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F2FBFB"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:accessibilityHeading="true"
+            android:text="@string/ema_check_in_title"
+            android:textColor="#151D1D"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/ema_check_in_subtitle"
+            android:textColor="#3E4949"
+            android:textSize="14sp" />
+
+        <include layout="@layout/ema_slider_mood" />
+        <include layout="@layout/ema_slider_energy" />
+        <include layout="@layout/ema_slider_focus" />
+        <include layout="@layout/ema_slider_stress" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/ema_activity_title"
+            android:textColor="#151D1D"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <RadioGroup
+            android:id="@+id/ema_activity"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <EditText
+            android:id="@+id/ema_note"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="@string/ema_note_hint"
+            android:inputType="textCapSentences|textMultiLine"
+            android:maxLength="280"
+            android:maxLines="3"
+            android:minHeight="56dp" />
+
+        <Button
+            android:id="@+id/ema_submit"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="20dp"
+            android:enabled="false"
+            android:text="@string/ema_submit"
+            android:textAllCaps="false" />
+
+        <Button
+            android:id="@+id/ema_skip"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="@string/ema_skip"
+            android:textAllCaps="false" />
+    </LinearLayout>
+</ScrollView>
