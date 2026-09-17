@@ -95,7 +95,10 @@ case "$*" in
         ;;
     "pair 198.51.100.42:37123")
         read -r pairing_code
-        [[ "$pairing_code" == "123456" ]]
+        if [[ "$pairing_code" != "123456" ]]; then
+            printf 'Failed: Wrong password or code\n' >&2
+            exit 1
+        fi
         printf 'Successfully paired to 198.51.100.42:37123\n'
         ;;
     "connect 198.51.100.42:40239")
@@ -131,7 +134,7 @@ output=$(
     REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
     REVA_RELEASE_POLL_SECONDS=0 \
     REVA_TEST_COMMAND_LOG="$command_log" \
-        "$script_under_test"
+        "$script_under_test" </dev/null
 )
 
 grep -Fq "git push origin refs/tags/v${test_version_name}" "$command_log"
@@ -164,13 +167,34 @@ grep -Fq 'adb -s 198.51.100.42:40239 install -r' "$command_log"
 
 echo "release-to-device wireless connection recovery test passed"
 
+: >"$command_log"
+rm -f "$device_state_file"
+wireless_retry_output=$(
+    printf 'invalid-target\n198.51.100.42:37123\nwrongcode\n198.51.100.42:37123\n123456\n198.51.100.42:40239\n' | env \
+        PATH="$fake_bin:$PATH" \
+        REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
+        REVA_TEST_COMMAND_LOG="$command_log" \
+        REVA_TEST_ADB_DEVICES_MODE=recovery \
+        REVA_TEST_ADB_STATE_FILE="$device_state_file" \
+            "$script_under_test" 2>&1
+)
+
+grep -Fq 'Pairing target must contain a valid IPv4 address and port. Please try again.' <<<"$wireless_retry_output"
+grep -Fq 'ADB pairing failed (the pairing code may be incorrect or expired). Please try again.' <<<"$wireless_retry_output"
+grep -Fq 'adb pair 198.51.100.42:37123' "$command_log"
+grep -Fq 'adb connect 198.51.100.42:40239' "$command_log"
+grep -Fq 'adb -s 198.51.100.42:40239 install -r' "$command_log"
+grep -Fq "Installed and launched Reva Health Exporter v${test_version_name}" <<<"$wireless_retry_output"
+
+echo "release-to-device wireless connection retry test passed"
+
 set +e
 no_device_output=$(
     PATH="$fake_bin:$PATH" \
     REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
     REVA_TEST_COMMAND_LOG="$command_log" \
     REVA_TEST_ADB_DEVICES_MODE=none \
-        "$script_under_test" 2>&1
+        "$script_under_test" </dev/null 2>&1
 )
 no_device_status=$?
 set -e
@@ -186,7 +210,7 @@ multiple_devices_output=$(
     REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
     REVA_TEST_COMMAND_LOG="$command_log" \
     REVA_TEST_ADB_DEVICES_MODE=multiple \
-        "$script_under_test" 2>&1
+        "$script_under_test" </dev/null 2>&1
 )
 multiple_devices_status=$?
 set -e
@@ -204,7 +228,7 @@ recovery_output=$(
     REVA_RELEASE_POLL_SECONDS=0 \
     REVA_TEST_COMMAND_LOG="$command_log" \
     REVA_TEST_LOCAL_TAG_EXISTS=1 \
-        "$script_under_test"
+        "$script_under_test" </dev/null
 )
 
 grep -Fq "git push origin refs/tags/v${test_version_name}" "$command_log"
@@ -219,7 +243,7 @@ existing_release_output=$(
     REVA_RELEASE_POLL_SECONDS=0 \
     REVA_TEST_COMMAND_LOG="$command_log" \
     REVA_TEST_REMOTE_TAG_EXISTS=1 \
-        "$script_under_test"
+        "$script_under_test" </dev/null
 )
 
 grep -Fq "git fetch origin refs/tags/v${test_version_name}:refs/tags/v${test_version_name}" "$command_log"
