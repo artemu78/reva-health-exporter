@@ -3,6 +3,7 @@ package dev.reva.healthexporter
 import android.Manifest
 import android.app.TimePickerDialog
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -327,7 +328,12 @@ class MainActivity : ComponentActivity() {
             config.notificationsEnabled && Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 5601)
+            val preferences = getSharedPreferences("reva_ema_permissions", Context.MODE_PRIVATE)
+            val hasRequested = preferences.getBoolean("requested_post_notifications", false)
+            if (!hasRequested || shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+                preferences.edit().putBoolean("requested_post_notifications", true).apply()
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 5601)
+            }
         }
     }
 
@@ -335,6 +341,10 @@ class MainActivity : ComponentActivity() {
         val now = Instant.now()
         val eventId = UUID.randomUUID().toString()
         emaStore.save(EmaEvent.pending(eventId, now, ZoneId.systemDefault()))
+        WorkManagerEmaGateway(this).enqueueExpiry(
+            eventId = eventId,
+            expiresAt = now.plus(EmaScheduleCoordinator.RESPONSE_WINDOW),
+        )
         startActivity(
             Intent(this, EmaCheckInActivity::class.java)
                 .putExtra(WorkManagerEmaGateway.KEY_EVENT_ID, eventId),

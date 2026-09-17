@@ -52,4 +52,20 @@ class EmaSchedulePlannerTest {
 
         assertTrue(prompts.isEmpty())
     }
+
+    @Test
+    fun preservesMinimumSixtyMinuteSpacingForTwoPromptsInTwoHourWindow() {
+        val shortConfig = config.copy(
+            activeStart = LocalTime.of(9, 0),
+            activeEnd = LocalTime.of(11, 0),
+            checkInsPerDay = 2,
+        )
+        val prompts = EmaSchedulePlanner { 0.99 }.plan(date, zone, shortConfig)
+
+        assertEquals(2, prompts.size)
+        val diffMinutes = ChronoUnit.MINUTES.between(prompts[0], prompts[1])
+        assertEquals(60L, diffMinutes)
+        assertEquals(LocalTime.of(9, 30), prompts[0].atZone(zone).toLocalTime())
+        assertEquals(LocalTime.of(10, 30), prompts[1].atZone(zone).toLocalTime())
+    }
 }

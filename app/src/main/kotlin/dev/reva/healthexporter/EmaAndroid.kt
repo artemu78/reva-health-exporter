@@ -30,6 +30,20 @@ class WorkManagerEmaGateway(
 ) : EmaWorkGateway {
     constructor(context: Context) : this(WorkManager.getInstance(context))
 
+    override fun enqueueExpiry(eventId: String, expiresAt: Instant) {
+        val promptData = Data.Builder().putString(KEY_EVENT_ID, eventId).build()
+        val expiryRequest = OneTimeWorkRequestBuilder<EmaExpiryWorker>()
+            .setInputData(promptData)
+            .setInitialDelay(delayUntil(expiresAt), TimeUnit.MILLISECONDS)
+            .addTag(TAG_EMA_WORK)
+            .build()
+        workManager.enqueueUniqueWork(
+            "$EXPIRY_WORK_PREFIX$eventId",
+            ExistingWorkPolicy.KEEP,
+            expiryRequest,
+        )
+    }
+
     override fun enqueuePrompt(prompt: EmaScheduledPrompt) {
         val promptData = Data.Builder().putString(KEY_EVENT_ID, prompt.eventId).build()
         val promptRequest = OneTimeWorkRequestBuilder<EmaPromptWorker>()
@@ -43,16 +57,7 @@ class WorkManagerEmaGateway(
             promptRequest,
         )
 
-        val expiryRequest = OneTimeWorkRequestBuilder<EmaExpiryWorker>()
-            .setInputData(promptData)
-            .setInitialDelay(delayUntil(prompt.expiresAt), TimeUnit.MILLISECONDS)
-            .addTag(TAG_EMA_WORK)
-            .build()
-        workManager.enqueueUniqueWork(
-            "$EXPIRY_WORK_PREFIX${prompt.eventId}",
-            ExistingWorkPolicy.KEEP,
-            expiryRequest,
-        )
+        enqueueExpiry(prompt.eventId, prompt.expiresAt)
     }
 
     override fun ensureScheduleRefresh() {

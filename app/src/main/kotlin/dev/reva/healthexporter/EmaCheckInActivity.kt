@@ -8,6 +8,7 @@ import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import java.time.Instant
 
@@ -102,8 +103,12 @@ class EmaCheckInActivity : ComponentActivity() {
             activityLabel = activity.label,
             note = findViewById<EditText>(R.id.ema_note).text.toString(),
         )
-        if (saved) notificationFactory(this).cancel(eventId)
-        finish()
+        if (saved) {
+            notificationFactory(this).cancel(eventId)
+            finish()
+        } else {
+            Toast.makeText(this, R.string.ema_check_in_expired, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

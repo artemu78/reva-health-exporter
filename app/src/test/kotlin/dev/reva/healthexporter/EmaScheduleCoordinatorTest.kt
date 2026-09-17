@@ -87,15 +87,44 @@ class EmaScheduleCoordinatorTest {
 
         assertTrue(gateway.prompts.any { it.eventId == "due" })
     }
+
+    @Test
+    fun replacesPendingScheduleWhenTimezoneChanges() {
+        val oldZone = ZoneId.of("UTC")
+        val newZone = ZoneId.of("Europe/Moscow")
+        val store = InMemoryEmaEventStore().apply {
+            save(EmaEvent.pending("old-utc-prompt", now.plusSeconds(3_600), oldZone))
+        }
+        val gateway = RecordingEmaWorkGateway()
+        var nextId = 0
+        val coordinator = EmaScheduleCoordinator(
+            store = store,
+            workGateway = gateway,
+            planner = EmaSchedulePlanner { 0.5 },
+            idGenerator = EmaIdGenerator { "new-${++nextId}" },
+        )
+
+        coordinator.reconcile(now, newZone, config)
+
+        assertEquals(EmaResponseStatus.EXPIRED, store.get("old-utc-prompt")?.status)
+        assertTrue(gateway.cancelRequests >= 1)
+        assertTrue(gateway.prompts.none { it.eventId == "old-utc-prompt" })
+        assertTrue(gateway.prompts.all { store.get(it.eventId)?.timezone == "Europe/Moscow" })
+    }
 }
 
 private class RecordingEmaWorkGateway : EmaWorkGateway {
     val prompts = mutableListOf<EmaScheduledPrompt>()
+    val expiries = mutableListOf<Pair<String, Instant>>()
     var refreshRequests = 0
     var cancelRequests = 0
 
     override fun enqueuePrompt(prompt: EmaScheduledPrompt) {
         if (prompts.none { it.eventId == prompt.eventId }) prompts += prompt
+    }
+
+    override fun enqueueExpiry(eventId: String, expiresAt: Instant) {
+        expiries += eventId to expiresAt
     }
 
     override fun ensureScheduleRefresh() {

@@ -110,7 +110,9 @@ class FileEmaEventStore(
     private val directory: File,
 ) : EmaEventStore {
     init {
-        require(directory.exists() || directory.mkdirs()) { "EMA event directory could not be created" }
+        require(directory.isDirectory || (!directory.exists() && directory.mkdirs())) {
+            "EMA event directory could not be created"
+        }
     }
 
     override fun save(event: EmaEvent) {
@@ -232,6 +234,9 @@ fun serializeEmaEvent(event: EmaEvent): String {
 fun deserializeEmaEvent(serialized: String): EmaEvent? {
     return try {
         val json = JsonParser.parseString(serialized).asJsonObject
+        val schemaVersion = json.get("schemaVersion")?.asInt ?: 1
+        if (schemaVersion != 1) return null
+
         val status = EmaResponseStatus.fromWireValue(json.get("status")?.asString ?: return null) ?: return null
         val mood = json.get("mood")?.asInt
         val energy = json.get("energy")?.asInt
@@ -245,16 +250,25 @@ fun deserializeEmaEvent(serialized: String): EmaEvent? {
         } else {
             null
         }
+        val activity = json.get("activity")?.asString
+        val answeredAt = json.get("answeredAt")?.asString?.let(Instant::parse)
+
+        if (status == EmaResponseStatus.ANSWERED) {
+            if (answers == null || answeredAt == null || activity == null) return null
+        } else {
+            if (answers != null || answeredAt != null || activity != null || core.any { it != null }) return null
+        }
+
         EmaEvent(
-            schemaVersion = json.get("schemaVersion")?.asInt ?: 1,
+            schemaVersion = schemaVersion,
             id = json.get("id")?.asString ?: return null,
             scheduleDate = json.get("scheduleDate")?.asString?.let(LocalDate::parse)
                 ?: Instant.parse(json.get("scheduledAt")?.asString ?: return null)
                     .atZone(ZoneId.of(json.get("timezone")?.asString ?: return null)).toLocalDate(),
             scheduledAt = Instant.parse(json.get("scheduledAt")?.asString ?: return null),
-            answeredAt = json.get("answeredAt")?.asString?.let(Instant::parse),
+            answeredAt = answeredAt,
             answers = answers,
-            activity = json.get("activity")?.asString,
+            activity = activity,
             activityLabel = json.get("activityLabel")?.asString,
             note = json.get("note")?.asString,
             status = status,

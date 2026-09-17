@@ -75,4 +75,37 @@ class EmaEventStoreTest {
             note = null,
         )
     }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun fileStoreRejectsRegularFileAsDirectory() {
+        val file = temporaryFolder.newFile("not-a-directory")
+        FileEmaEventStore(file)
+    }
+
+    @Test
+    fun deserializeRejectsUnsupportedSchemaVersion() {
+        val json = """{"schemaVersion":2,"id":"e1","scheduleDate":"2026-09-15","scheduledAt":"2026-09-15T09:15:30.123Z","status":"pending","timezone":"UTC"}"""
+        assertNull(deserializeEmaEvent(json))
+    }
+
+    @Test
+    fun deserializeRejectsIncompleteAnsweredRecord() {
+        // Missing activity
+        val missingActivity = """{"schemaVersion":1,"id":"e2","scheduleDate":"2026-09-15","scheduledAt":"2026-09-15T09:15:30.123Z","answeredAt":"2026-09-15T09:17:02.456Z","mood":4,"energy":2,"focus":3,"stress":4,"status":"answered","timezone":"UTC"}"""
+        assertNull(deserializeEmaEvent(missingActivity))
+
+        // Missing mood
+        val missingMood = """{"schemaVersion":1,"id":"e3","scheduleDate":"2026-09-15","scheduledAt":"2026-09-15T09:15:30.123Z","answeredAt":"2026-09-15T09:17:02.456Z","energy":2,"focus":3,"stress":4,"activity":"coding","status":"answered","timezone":"UTC"}"""
+        assertNull(deserializeEmaEvent(missingMood))
+
+        // Missing answeredAt
+        val missingAnsweredAt = """{"schemaVersion":1,"id":"e4","scheduleDate":"2026-09-15","scheduledAt":"2026-09-15T09:15:30.123Z","mood":4,"energy":2,"focus":3,"stress":4,"activity":"coding","status":"answered","timezone":"UTC"}"""
+        assertNull(deserializeEmaEvent(missingAnsweredAt))
+    }
+
+    @Test
+    fun deserializeRejectsPendingRecordWithAnswers() {
+        val pendingWithAnswers = """{"schemaVersion":1,"id":"e5","scheduleDate":"2026-09-15","scheduledAt":"2026-09-15T09:15:30.123Z","mood":4,"energy":2,"focus":3,"stress":4,"status":"pending","timezone":"UTC"}"""
+        assertNull(deserializeEmaEvent(pendingWithAnswers))
+    }
 }

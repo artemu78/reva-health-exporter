@@ -60,13 +60,13 @@ class EmaSchedulePlanner(
         val end = endDate.atTime(config.activeEnd).atZone(zoneId)
         val activeMinutes = Duration.between(start, end).toMinutes()
         val count = min(config.checkInsPerDay, max(1, (activeMinutes / MIN_SPACING_MINUTES).toInt()))
-        val spacing = activeMinutes.toDouble() / (count + 1)
+        val spacing = activeMinutes.toDouble() / count
         val jitterRadius = max(0.0, min(spacing * 0.25, (spacing - MIN_SPACING_MINUTES) / 2.0))
 
         return (1..count).map { index ->
             val sample = random.nextDouble().coerceIn(0.0, 0.999999)
             val jitter = (sample * 2.0 - 1.0) * jitterRadius
-            start.plusMinutes((spacing * index + jitter).toLong()).toInstant()
+            start.plusMinutes((spacing * (index - 0.5) + jitter).toLong()).toInstant()
         }
     }
 

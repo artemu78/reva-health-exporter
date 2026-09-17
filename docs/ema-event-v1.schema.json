@@ -28,7 +28,8 @@
     },
     "scheduledAt": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "Z$"
     },
     "answeredAt": {
       "type": "string",

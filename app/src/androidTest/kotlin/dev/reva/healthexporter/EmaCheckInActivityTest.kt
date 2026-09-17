@@ -12,6 +12,7 @@ import java.time.Instant
 import java.time.ZoneId
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -68,5 +69,40 @@ class EmaCheckInActivityTest {
         assertEquals("work_coding", event?.activity)
         assertEquals("Work / coding", event?.activityLabel)
         assertEquals(Instant.parse("2026-09-15T09:01:02.003Z"), event?.answeredAt)
+    }
+
+    @Test
+    fun failedResponseTransitionKeepsFormOpenWithoutFinishing() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = InMemoryEmaEventStore().apply {
+            save(
+                EmaEvent.pending(
+                    "expired-event",
+                    Instant.parse("2026-09-15T09:00:00Z"),
+                    ZoneId.of("Europe/Moscow"),
+                ),
+            )
+        }
+        EmaCheckInActivity.eventStoreFactory = { store }
+        EmaCheckInActivity.configStoreFactory = {
+            object : EmaConfigStore {
+                override fun load() = EmaConfig(
+                    activityCategories = listOf(EmaActivityCategory("work_coding", "Work / coding")),
+                )
+                override fun save(config: EmaConfig) = Unit
+            }
+        }
+        val intent = Intent(context, EmaCheckInActivity::class.java)
+            .putExtra(WorkManagerEmaGateway.KEY_EVENT_ID, "expired-event")
+
+        ActivityScenario.launch<EmaCheckInActivity>(intent).use { scenario ->
+            scenario.onActivity { activity ->
+                store.save(store.get("expired-event")!!.copy(status = EmaResponseStatus.EXPIRED))
+                val activities = activity.findViewById<RadioGroup>(R.id.ema_activity)
+                (activities.getChildAt(0) as RadioButton).performClick()
+                activity.findViewById<Button>(R.id.ema_submit).performClick()
+                assertFalse(activity.isFinishing)
+            }
+        }
     }
 }

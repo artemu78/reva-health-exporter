@@ -13,6 +13,7 @@ data class EmaScheduledPrompt(
 
 interface EmaWorkGateway {
     fun enqueuePrompt(prompt: EmaScheduledPrompt)
+    fun enqueueExpiry(eventId: String, expiresAt: Instant)
     fun ensureScheduleRefresh()
     fun cancelAll()
 }
@@ -55,6 +56,14 @@ class EmaScheduleCoordinator(
     private fun scheduleDays(now: Instant, zoneId: ZoneId, config: EmaConfig, replace: Boolean) {
         val today = now.atZone(zoneId).toLocalDate()
         listOf(today, today.plusDays(1)).forEach { date ->
+            val pendingDifferentZone = store.all().filter {
+                it.scheduleDate == date && it.status == EmaResponseStatus.PENDING && it.timezone != zoneId.id
+            }
+            if (pendingDifferentZone.isNotEmpty()) {
+                workGateway.cancelAll()
+                val service = EmaCheckInService(store)
+                pendingDifferentZone.forEach { service.expire(it.id) }
+            }
             val alreadyScheduled = store.all().any {
                 it.scheduleDate == date && it.timezone == zoneId.id
             }
