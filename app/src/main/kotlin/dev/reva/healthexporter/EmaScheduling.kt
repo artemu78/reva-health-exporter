@@ -80,19 +80,18 @@ class EmaScheduleCoordinator(
     }
 
     private fun enqueuePending(now: Instant) {
-        val hasPending = store.all().any {
-            it.status == EmaResponseStatus.PENDING && !it.scheduledAt.isAfter(now)
-        }
         val pendingEvents = store.all().filter { it.status == EmaResponseStatus.PENDING }
-        if (hasPending) {
-            pendingEvents.filter { !it.scheduledAt.isAfter(now) }.forEach { event ->
-                workGateway.enqueuePrompt(
-                    EmaScheduledPrompt(
-                        eventId = event.id,
-                        scheduledAt = event.scheduledAt,
-                    ),
-                )
-            }
+        val duePendingEvents = pendingEvents.filter { !it.scheduledAt.isAfter(now) }
+            .sortedWith(compareBy({ it.scheduledAt }, { it.id }))
+
+        if (duePendingEvents.isNotEmpty()) {
+            val earliestDue = duePendingEvents.first()
+            workGateway.enqueuePrompt(
+                EmaScheduledPrompt(
+                    eventId = earliestDue.id,
+                    scheduledAt = earliestDue.scheduledAt,
+                ),
+            )
         } else {
             pendingEvents.forEach { event ->
                 workGateway.enqueuePrompt(

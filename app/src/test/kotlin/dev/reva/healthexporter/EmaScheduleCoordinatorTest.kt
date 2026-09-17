@@ -58,6 +58,51 @@ class EmaScheduleCoordinatorTest {
     }
 
     @Test
+    fun enqueuesOnlyEarliestWhenMultipleDueEventsExistSimultaneously() {
+        val dueTime = now.minusSeconds(300)
+        val store = InMemoryEmaEventStore().apply {
+            save(EmaEvent.pending("due-b", dueTime, zone))
+            save(EmaEvent.pending("due-a", dueTime, zone))
+            save(EmaEvent.pending("due-c", dueTime.plusSeconds(60), zone))
+        }
+        val gateway = RecordingEmaWorkGateway()
+        val coordinator = EmaScheduleCoordinator(store, gateway, EmaSchedulePlanner { 0.5 })
+
+        coordinator.reconcile(now, zone, config)
+
+        assertEquals(listOf("due-a"), gateway.prompts.map { it.eventId })
+        assertEquals(EmaResponseStatus.PENDING, store.get("due-b")?.status)
+        assertEquals(EmaResponseStatus.PENDING, store.get("due-c")?.status)
+    }
+
+    @Test
+    fun enqueuesNextDeferredDueEventOnceActiveEventReachesTerminalStatus() {
+        val dueTime = now.minusSeconds(300)
+        val store = InMemoryEmaEventStore().apply {
+            save(EmaEvent.pending("due-1", dueTime, zone))
+            save(EmaEvent.pending("due-2", dueTime.plusSeconds(60), zone))
+        }
+        val gateway = RecordingEmaWorkGateway()
+        val coordinator = EmaScheduleCoordinator(store, gateway, EmaSchedulePlanner { 0.5 })
+
+        coordinator.reconcile(now, zone, config)
+        assertEquals(listOf("due-1"), gateway.prompts.map { it.eventId })
+
+        EmaCheckInService(store).answer(
+            eventId = "due-1",
+            answeredAt = now.minusSeconds(100),
+            answers = EmaAnswers(3, 3, 3, 3),
+            activity = "coding",
+            note = null,
+        )
+
+        val nextGateway = RecordingEmaWorkGateway()
+        val nextCoordinator = EmaScheduleCoordinator(store, nextGateway, EmaSchedulePlanner { 0.5 })
+        nextCoordinator.reconcile(now, zone, config)
+        assertEquals(listOf("due-2"), nextGateway.prompts.map { it.eventId })
+    }
+
+    @Test
     fun doesNotExpirePastPendingPromptsOnReconcile() {
         val store = InMemoryEmaEventStore().apply {
             save(EmaEvent.pending("old-prompt", now.minus(Duration.ofHours(5)), zone))
