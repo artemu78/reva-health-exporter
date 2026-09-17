@@ -1,0 +1,8 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:orientation="vertical">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/ema_stress" android:textColor="#151D1D" android:textSize="17sp" android:textStyle="bold" />
+        <TextView android:id="@+id/ema_stress_value" android:layout_width="40dp" android:layout_height="wrap_content" android:gravity="center" android:textSize="18sp" android:textStyle="bold" />
+    </LinearLayout>
+    <SeekBar android:id="@+id/ema_stress" android:layout_width="match_parent" android:layout_height="48dp" android:contentDescription="@string/ema_stress_description" android:max="5" android:min="1" android:progress="3" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ema_stress_scale" android:textColor="#3E4949" android:textSize="12sp" />
+</LinearLayout>
