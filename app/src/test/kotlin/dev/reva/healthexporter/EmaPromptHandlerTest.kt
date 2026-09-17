@@ -27,7 +27,7 @@ class EmaPromptHandlerTest {
     }
 
     @Test
-    fun latePromptExpiresWithoutShowingNotification() {
+    fun delayedPromptDoesNotExpireAndShowsNotification() {
         val store = InMemoryEmaEventStore().apply {
             save(EmaEvent.pending("event-2", scheduledAt, ZoneId.of("UTC")))
         }
@@ -35,12 +35,12 @@ class EmaPromptHandlerTest {
 
         val delivered = EmaPromptHandler(store, notifications).deliver(
             eventId = "event-2",
-            now = scheduledAt.plus(EmaScheduleCoordinator.RESPONSE_WINDOW),
+            now = scheduledAt.plus(Duration.ofHours(5)),
         )
 
-        assertTrue(!delivered)
-        assertTrue(notifications.shown.isEmpty())
-        assertEquals(EmaResponseStatus.EXPIRED, store.get("event-2")?.status)
+        assertTrue(delivered)
+        assertEquals(listOf("event-2"), notifications.shown)
+        assertEquals(EmaResponseStatus.PENDING, store.get("event-2")?.status)
     }
 
     @Test

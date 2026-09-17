@@ -8,12 +8,10 @@ import java.util.UUID
 data class EmaScheduledPrompt(
     val eventId: String,
     val scheduledAt: Instant,
-    val expiresAt: Instant,
 )
 
 interface EmaWorkGateway {
     fun enqueuePrompt(prompt: EmaScheduledPrompt)
-    fun enqueueExpiry(eventId: String, expiresAt: Instant)
     fun ensureScheduleRefresh()
     fun cancelAll()
 }
@@ -29,7 +27,6 @@ class EmaScheduleCoordinator(
     private val idGenerator: EmaIdGenerator = EmaIdGenerator { UUID.randomUUID().toString() },
 ) {
     fun reconcile(now: Instant, zoneId: ZoneId, config: EmaConfig) {
-        expirePastPrompts(now)
         if (!config.notificationsEnabled) {
             workGateway.cancelAll()
             store.all().filter { it.status == EmaResponseStatus.PENDING }.forEach {
@@ -83,28 +80,28 @@ class EmaScheduleCoordinator(
     }
 
     private fun enqueuePending(now: Instant) {
-        store.all().filter { event ->
-            event.status == EmaResponseStatus.PENDING &&
-                event.scheduledAt.plus(RESPONSE_WINDOW).isAfter(now)
-        }.forEach { event ->
-            workGateway.enqueuePrompt(
-                EmaScheduledPrompt(
-                    eventId = event.id,
-                    scheduledAt = event.scheduledAt,
-                    expiresAt = event.scheduledAt.plus(RESPONSE_WINDOW),
-                ),
-            )
+        val hasPending = store.all().any {
+            it.status == EmaResponseStatus.PENDING && !it.scheduledAt.isAfter(now)
         }
-    }
-
-    private fun expirePastPrompts(now: Instant) {
-        val service = EmaCheckInService(store)
-        store.all().filter {
-            it.status == EmaResponseStatus.PENDING && !it.scheduledAt.plus(RESPONSE_WINDOW).isAfter(now)
-        }.forEach { service.expire(it.id) }
-    }
-
-    companion object {
-        val RESPONSE_WINDOW: Duration = Duration.ofHours(2)
+        val pendingEvents = store.all().filter { it.status == EmaResponseStatus.PENDING }
+        if (hasPending) {
+            pendingEvents.filter { !it.scheduledAt.isAfter(now) }.forEach { event ->
+                workGateway.enqueuePrompt(
+                    EmaScheduledPrompt(
+                        eventId = event.id,
+                        scheduledAt = event.scheduledAt,
+                    ),
+                )
+            }
+        } else {
+            pendingEvents.forEach { event ->
+                workGateway.enqueuePrompt(
+                    EmaScheduledPrompt(
+                        eventId = event.id,
+                        scheduledAt = event.scheduledAt,
+                    ),
+                )
+            }
+        }
     }
 }
