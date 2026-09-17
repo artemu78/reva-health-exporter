@@ -35,8 +35,84 @@ class EmaScheduleCoordinatorTest {
 
         assertEquals(10, store.all().size)
         assertEquals(10, gateway.prompts.map { it.eventId }.distinct().size)
-        assertTrue(gateway.prompts.all { it.expiresAt == it.scheduledAt.plus(Duration.ofHours(2)) })
         assertEquals(2, gateway.refreshRequests)
+    }
+
+    @Test
+    fun skipsEnqueuingNewPromptsWhenAnExistingPromptIsStillPending() {
+        val store = InMemoryEmaEventStore().apply {
+            save(EmaEvent.pending("pending-due", now.minusSeconds(300), zone))
+        }
+        val gateway = RecordingEmaWorkGateway()
+        var nextId = 0
+        val coordinator = EmaScheduleCoordinator(
+            store = store,
+            workGateway = gateway,
+            planner = EmaSchedulePlanner { 0.5 },
+            idGenerator = EmaIdGenerator { "event-${++nextId}" },
+        )
+
+        coordinator.reconcile(now, zone, config)
+
+        assertEquals(listOf("pending-due"), gateway.prompts.map { it.eventId })
+    }
+
+    @Test
+    fun enqueuesOnlyEarliestWhenMultipleDueEventsExistSimultaneously() {
+        val dueTime = now.minusSeconds(300)
+        val store = InMemoryEmaEventStore().apply {
+            save(EmaEvent.pending("due-b", dueTime, zone))
+            save(EmaEvent.pending("due-a", dueTime, zone))
+            save(EmaEvent.pending("due-c", dueTime.plusSeconds(60), zone))
+        }
+        val gateway = RecordingEmaWorkGateway()
+        val coordinator = EmaScheduleCoordinator(store, gateway, EmaSchedulePlanner { 0.5 })
+
+        coordinator.reconcile(now, zone, config)
+
+        assertEquals(listOf("due-a"), gateway.prompts.map { it.eventId })
+        assertEquals(EmaResponseStatus.PENDING, store.get("due-b")?.status)
+        assertEquals(EmaResponseStatus.PENDING, store.get("due-c")?.status)
+    }
+
+    @Test
+    fun enqueuesNextDeferredDueEventOnceActiveEventReachesTerminalStatus() {
+        val dueTime = now.minusSeconds(300)
+        val store = InMemoryEmaEventStore().apply {
+            save(EmaEvent.pending("due-1", dueTime, zone))
+            save(EmaEvent.pending("due-2", dueTime.plusSeconds(60), zone))
+        }
+        val gateway = RecordingEmaWorkGateway()
+        val coordinator = EmaScheduleCoordinator(store, gateway, EmaSchedulePlanner { 0.5 })
+
+        coordinator.reconcile(now, zone, config)
+        assertEquals(listOf("due-1"), gateway.prompts.map { it.eventId })
+
+        EmaCheckInService(store).answer(
+            eventId = "due-1",
+            answeredAt = now.minusSeconds(100),
+            answers = EmaAnswers(3, 3, 3, 3),
+            activity = "coding",
+            note = null,
+        )
+
+        val nextGateway = RecordingEmaWorkGateway()
+        val nextCoordinator = EmaScheduleCoordinator(store, nextGateway, EmaSchedulePlanner { 0.5 })
+        nextCoordinator.reconcile(now, zone, config)
+        assertEquals(listOf("due-2"), nextGateway.prompts.map { it.eventId })
+    }
+
+    @Test
+    fun doesNotExpirePastPendingPromptsOnReconcile() {
+        val store = InMemoryEmaEventStore().apply {
+            save(EmaEvent.pending("old-prompt", now.minus(Duration.ofHours(5)), zone))
+        }
+        val gateway = RecordingEmaWorkGateway()
+        val coordinator = EmaScheduleCoordinator(store, gateway, EmaSchedulePlanner { 0.5 })
+
+        coordinator.reconcile(now, zone, config)
+
+        assertEquals(EmaResponseStatus.PENDING, store.get("old-prompt")?.status)
     }
 
     @Test
@@ -115,16 +191,11 @@ class EmaScheduleCoordinatorTest {
 
 private class RecordingEmaWorkGateway : EmaWorkGateway {
     val prompts = mutableListOf<EmaScheduledPrompt>()
-    val expiries = mutableListOf<Pair<String, Instant>>()
     var refreshRequests = 0
     var cancelRequests = 0
 
     override fun enqueuePrompt(prompt: EmaScheduledPrompt) {
         if (prompts.none { it.eventId == prompt.eventId }) prompts += prompt
-    }
-
-    override fun enqueueExpiry(eventId: String, expiresAt: Instant) {
-        expiries += eventId to expiresAt
     }
 
     override fun ensureScheduleRefresh() {

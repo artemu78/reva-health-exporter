@@ -30,20 +30,6 @@ class WorkManagerEmaGateway(
 ) : EmaWorkGateway {
     constructor(context: Context) : this(WorkManager.getInstance(context))
 
-    override fun enqueueExpiry(eventId: String, expiresAt: Instant) {
-        val promptData = Data.Builder().putString(KEY_EVENT_ID, eventId).build()
-        val expiryRequest = OneTimeWorkRequestBuilder<EmaExpiryWorker>()
-            .setInputData(promptData)
-            .setInitialDelay(delayUntil(expiresAt), TimeUnit.MILLISECONDS)
-            .addTag(TAG_EMA_WORK)
-            .build()
-        workManager.enqueueUniqueWork(
-            "$EXPIRY_WORK_PREFIX$eventId",
-            ExistingWorkPolicy.KEEP,
-            expiryRequest,
-        )
-    }
-
     override fun enqueuePrompt(prompt: EmaScheduledPrompt) {
         val promptData = Data.Builder().putString(KEY_EVENT_ID, prompt.eventId).build()
         val promptRequest = OneTimeWorkRequestBuilder<EmaPromptWorker>()
@@ -56,8 +42,6 @@ class WorkManagerEmaGateway(
             ExistingWorkPolicy.KEEP,
             promptRequest,
         )
-
-        enqueueExpiry(prompt.eventId, prompt.expiresAt)
     }
 
     override fun ensureScheduleRefresh() {
@@ -82,7 +66,6 @@ class WorkManagerEmaGateway(
         const val KEY_EVENT_ID = "ema_event_id"
         const val TAG_EMA_WORK = "reva_ema_work"
         const val PROMPT_WORK_PREFIX = "reva_ema_prompt_"
-        const val EXPIRY_WORK_PREFIX = "reva_ema_expiry_"
         const val REFRESH_WORK_NAME = "reva_ema_schedule_refresh"
     }
 }
@@ -97,20 +80,6 @@ class EmaPromptWorker(
             emaEventStore(applicationContext),
             AndroidEmaNotificationGateway(applicationContext),
         ).deliver(eventId, Instant.now())
-        return Result.success()
-    }
-}
-
-class EmaExpiryWorker(
-    appContext: Context,
-    workerParams: WorkerParameters,
-) : CoroutineWorker(appContext, workerParams) {
-    override suspend fun doWork(): Result {
-        val eventId = inputData.getString(WorkManagerEmaGateway.KEY_EVENT_ID) ?: return Result.failure()
-        EmaPromptHandler(
-            emaEventStore(applicationContext),
-            AndroidEmaNotificationGateway(applicationContext),
-        ).expire(eventId)
         return Result.success()
     }
 }

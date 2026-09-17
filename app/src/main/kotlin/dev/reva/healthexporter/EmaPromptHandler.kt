@@ -11,12 +11,13 @@ class EmaPromptHandler(
     private val store: EmaEventStore,
     private val notifications: EmaNotificationGateway,
 ) {
-    fun deliver(eventId: String, now: Instant): Boolean {
+    fun deliver(eventId: String, now: Instant = Instant.now()): Boolean {
         val event = store.get(eventId) ?: return false
         if (event.status != EmaResponseStatus.PENDING) return false
-        if (!event.scheduledAt.plus(EmaScheduleCoordinator.RESPONSE_WINDOW).isAfter(now)) {
-            EmaCheckInService(store).expire(eventId)
-            notifications.cancel(eventId)
+        val earliestPending = store.all()
+            .filter { it.status == EmaResponseStatus.PENDING }
+            .minWithOrNull(compareBy({ it.scheduledAt }, { it.id }))
+        if (earliestPending != null && earliestPending.id != eventId) {
             return false
         }
         notifications.show(eventId)

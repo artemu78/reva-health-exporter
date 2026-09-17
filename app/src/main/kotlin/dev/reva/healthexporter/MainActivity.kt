@@ -341,10 +341,6 @@ class MainActivity : ComponentActivity() {
         val now = Instant.now()
         val eventId = UUID.randomUUID().toString()
         emaStore.save(EmaEvent.pending(eventId, now, ZoneId.systemDefault()))
-        WorkManagerEmaGateway(this).enqueueExpiry(
-            eventId = eventId,
-            expiresAt = now.plus(EmaScheduleCoordinator.RESPONSE_WINDOW),
-        )
         startActivity(
             Intent(this, EmaCheckInActivity::class.java)
                 .putExtra(WorkManagerEmaGateway.KEY_EVENT_ID, eventId),
