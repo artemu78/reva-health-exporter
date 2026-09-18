@@ -21,6 +21,7 @@ import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -81,7 +82,14 @@ class MainActivity : ComponentActivity() {
     private val emaConfigStore by lazy { SharedPreferencesEmaConfigStore(this) }
     private val emaStore by lazy { emaEventStore(this) }
     private var matrixWindowsBack = 0
-    private var matrixPage = R.id.matrix_records
+    private lateinit var navigator: ScreenNavigator
+    private val matrixPage: Int get() = navigator.currentScreen
+    private val backPressedCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            val previousScreen = navigator.goBack() ?: return
+            renderPage(previousScreen)
+        }
+    }
     private var restoredMatrixSelection = emptySet<LocalDate>()
     private var historyDestinationKey: String? = null
     private var lastValidDiagnosticState: DiagnosticScreenState? = null
@@ -99,13 +107,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         matrixWindowsBack = savedInstanceState?.getInt("matrix_window", 0) ?: 0
-        matrixPage = savedInstanceState?.getInt("matrix_page", R.id.matrix_records) ?: R.id.matrix_records
-        restoredMatrixSelection = savedInstanceState?.getStringArrayList("matrix_selection")
-            .orEmpty().map(LocalDate::parse).toSet()
+        val initialPage = savedInstanceState?.getInt("matrix_page", R.id.matrix_records) ?: R.id.matrix_records
+        val initialHistory = savedInstanceState?.getIntegerArrayList("matrix_page_history").orEmpty()
+        navigator = ScreenNavigator(
+            mainScreen = R.id.matrix_records,
+            initialScreen = initialPage,
+            initialHistory = initialHistory,
+        )
+        onBackPressedDispatcher.addCallback(this, backPressedCallback)
         setupMatrixNavigation()
         listOf(R.id.matrix_records, R.id.matrix_vaults, R.id.matrix_preferences).forEach {
-            findViewById<View>(it).visibility = if (it == matrixPage) View.VISIBLE else View.GONE
+            findViewById<View>(it).visibility = if (it == navigator.currentScreen) View.VISIBLE else View.GONE
         }
+        backPressedCallback.isEnabled = navigator.canGoBack
         findViewById<TextView>(R.id.app_version).text = getString(R.string.app_version, BuildConfig.VERSION_NAME)
         restoredDiagnosticState(savedInstanceState)?.let { restored ->
             diagnosticPresenter.restore(restored)
@@ -201,13 +215,19 @@ class MainActivity : ComponentActivity() {
     private fun recentHistoryDates(): List<LocalDate> =
         uploadMatrixDates(LocalDate.now(), matrixWindowsBack)
 
+    private fun renderPage(id: Int) {
+        listOf(R.id.matrix_records, R.id.matrix_vaults, R.id.matrix_preferences).forEach {
+            findViewById<View>(it).visibility = if (it == id) View.VISIBLE else View.GONE
+        }
+        backPressedCallback.isEnabled = navigator.canGoBack
+        renderExportHistory()
+    }
+
     private fun setupMatrixNavigation() {
         fun page(id: Int) {
-            matrixPage = id
-            listOf(R.id.matrix_records, R.id.matrix_vaults, R.id.matrix_preferences).forEach {
-                findViewById<View>(it).visibility = if (it == id) View.VISIBLE else View.GONE
+            if (navigator.navigateTo(id)) {
+                renderPage(id)
             }
-            renderExportHistory()
         }
         findViewById<View>(R.id.matrix_nav_records).setOnClickListener { page(R.id.matrix_records) }
         listOf(R.id.matrix_nav_vaults, R.id.matrix_account).forEach { id ->
@@ -636,6 +656,7 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt("matrix_window", matrixWindowsBack)
         outState.putInt("matrix_page", matrixPage)
+        outState.putIntegerArrayList("matrix_page_history", ArrayList(navigator.backStack))
         outState.putStringArrayList("matrix_selection", ArrayList(exportHistoryPresenter.state.rows
             .filter { it.selected }.map { it.date.toString() }))
         lastValidDiagnosticState?.let { outState.putSerializable(DIAGNOSTIC_STATE_KEY, it) }
