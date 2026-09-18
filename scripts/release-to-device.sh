@@ -79,12 +79,22 @@ No online Wi-Fi ADB device with an IP:port endpoint was found.
 5. Enter that pairing IP:port below; ADB will then ask for the six-digit code.
 6. Return to the main Wireless debugging screen for its separate IP address & Port.
 EOF
-    read -r -p "Pairing IP:port (press Enter if already paired): " pairing_target || \
-        fail "Wireless debugging setup was cancelled."
-    if [[ -n "$pairing_target" ]]; then
-        validate_adb_target "$pairing_target" || fail "Pairing target must contain a valid IPv4 address and port."
-        "$adb" pair "$pairing_target" || fail "ADB pairing failed."
-    fi
+    while true; do
+        read -r -p "Pairing IP:port (press Enter if already paired): " pairing_target || \
+            fail "Wireless debugging setup was cancelled."
+        if [[ -z "$pairing_target" ]]; then
+            break
+        fi
+        if ! validate_adb_target "$pairing_target"; then
+            echo "Pairing target must contain a valid IPv4 address and port. Please try again." >&2
+            continue
+        fi
+        if ! "$adb" pair "$pairing_target"; then
+            echo "ADB pairing failed (the pairing code may be incorrect or expired). Please try again." >&2
+            continue
+        fi
+        break
+    done
 
     read -r -p "IP address & Port from the main Wireless debugging screen: " connection_target || \
         fail "Wireless debugging setup was cancelled."
