@@ -15,7 +15,7 @@ Downstream consumers should follow the versioned
   whenever the configured period can support it.
 - WorkManager stores one delayed job per prompt and refreshes the next two days of the schedule every
   12 hours. Android may deliver deferrable work later than requested because of device power policy.
-- Prompts do not expire automatically. If a previous prompt remains pending, subsequent prompts are not enqueued to prevent overlapping questions.
+- Prompts remain active until answered, dismissed, or superseded. When a newer scheduled prompt is delivered or past-date schedules are reconciled, earlier unhandled prompts transition to expired to prevent overlapping questions while ensuring reminders never stall.
 
 The Settings screen can enable or disable notifications, change active hours, choose one to ten prompts
 per day, and replace the activity choices. Changing settings expires the old pending schedule and creates
@@ -41,8 +41,9 @@ The four scale meanings are displayed in the check-in screen and remain stable:
 - stress: completely relaxed to extremely stressed.
 
 Android's notification delete intent records a swipe or clear as `dismissed` when the platform delivers
-that callback. Pending prompts remain active until answered or dismissed. Opening the notification removes
-it without changing the response status, so the full-screen form can still be submitted.
+that callback. Backing out of the check-in form also records `dismissed`. Unhandled prompts that are superseded
+by subsequent prompts or past-date reconciliations reach `expired`. Opening the notification removes
+it without preventing submission while the screen remains open.
 
 ## Storage and privacy
 

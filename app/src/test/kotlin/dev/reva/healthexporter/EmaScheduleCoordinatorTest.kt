@@ -39,7 +39,7 @@ class EmaScheduleCoordinatorTest {
     }
 
     @Test
-    fun skipsEnqueuingNewPromptsWhenAnExistingPromptIsStillPending() {
+    fun enqueuesPendingDueAndAllFuturePromptsOnReconcile() {
         val store = InMemoryEmaEventStore().apply {
             save(EmaEvent.pending("pending-due", now.minusSeconds(300), zone))
         }
@@ -54,15 +54,18 @@ class EmaScheduleCoordinatorTest {
 
         coordinator.reconcile(now, zone, config)
 
-        assertEquals(listOf("pending-due"), gateway.prompts.map { it.eventId })
+        assertTrue(gateway.prompts.any { it.eventId == "pending-due" })
+        val futurePrompts = gateway.prompts.filter { it.eventId != "pending-due" }
+        assertTrue(futurePrompts.isNotEmpty())
+        assertTrue(futurePrompts.all { it.scheduledAt.isAfter(now) })
     }
 
     @Test
-    fun enqueuesOnlyEarliestWhenMultipleDueEventsExistSimultaneously() {
+    fun expiresSupersededDuePromptsLeavingOnlyLatestDueOnReconcile() {
         val dueTime = now.minusSeconds(300)
         val store = InMemoryEmaEventStore().apply {
-            save(EmaEvent.pending("due-b", dueTime, zone))
             save(EmaEvent.pending("due-a", dueTime, zone))
+            save(EmaEvent.pending("due-b", dueTime, zone))
             save(EmaEvent.pending("due-c", dueTime.plusSeconds(60), zone))
         }
         val gateway = RecordingEmaWorkGateway()
@@ -70,49 +73,31 @@ class EmaScheduleCoordinatorTest {
 
         coordinator.reconcile(now, zone, config)
 
-        assertEquals(listOf("due-a"), gateway.prompts.map { it.eventId })
-        assertEquals(EmaResponseStatus.PENDING, store.get("due-b")?.status)
+        assertEquals(EmaResponseStatus.EXPIRED, store.get("due-a")?.status)
+        assertEquals(EmaResponseStatus.EXPIRED, store.get("due-b")?.status)
         assertEquals(EmaResponseStatus.PENDING, store.get("due-c")?.status)
+        assertTrue(gateway.prompts.any { it.eventId == "due-c" })
     }
 
     @Test
-    fun enqueuesNextDeferredDueEventOnceActiveEventReachesTerminalStatus() {
-        val dueTime = now.minusSeconds(300)
+    fun expiresPastDatePendingPromptsOnReconcile() {
+        val yesterday = now.atZone(zone).toLocalDate().minusDays(1)
         val store = InMemoryEmaEventStore().apply {
-            save(EmaEvent.pending("due-1", dueTime, zone))
-            save(EmaEvent.pending("due-2", dueTime.plusSeconds(60), zone))
-        }
-        val gateway = RecordingEmaWorkGateway()
-        val coordinator = EmaScheduleCoordinator(store, gateway, EmaSchedulePlanner { 0.5 })
-
-        coordinator.reconcile(now, zone, config)
-        assertEquals(listOf("due-1"), gateway.prompts.map { it.eventId })
-
-        EmaCheckInService(store).answer(
-            eventId = "due-1",
-            answeredAt = now.minusSeconds(100),
-            answers = EmaAnswers(3, 3, 3, 3),
-            activity = "coding",
-            note = null,
-        )
-
-        val nextGateway = RecordingEmaWorkGateway()
-        val nextCoordinator = EmaScheduleCoordinator(store, nextGateway, EmaSchedulePlanner { 0.5 })
-        nextCoordinator.reconcile(now, zone, config)
-        assertEquals(listOf("due-2"), nextGateway.prompts.map { it.eventId })
-    }
-
-    @Test
-    fun doesNotExpirePastPendingPromptsOnReconcile() {
-        val store = InMemoryEmaEventStore().apply {
-            save(EmaEvent.pending("old-prompt", now.minus(Duration.ofHours(5)), zone))
+            save(
+                EmaEvent.pending(
+                    id = "yesterday-prompt",
+                    scheduledAt = now.minus(Duration.ofHours(25)),
+                    zoneId = zone,
+                    scheduleDate = yesterday,
+                ),
+            )
         }
         val gateway = RecordingEmaWorkGateway()
         val coordinator = EmaScheduleCoordinator(store, gateway, EmaSchedulePlanner { 0.5 })
 
         coordinator.reconcile(now, zone, config)
 
-        assertEquals(EmaResponseStatus.PENDING, store.get("old-prompt")?.status)
+        assertEquals(EmaResponseStatus.EXPIRED, store.get("yesterday-prompt")?.status)
     }
 
     @Test
