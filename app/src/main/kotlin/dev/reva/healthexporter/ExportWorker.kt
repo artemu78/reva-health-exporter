@@ -43,6 +43,7 @@ class ExportWorker(
         var clock: DiagnosticClock = SystemDiagnosticClock
         var zoneId: ZoneId = ZoneId.systemDefault()
         var idGenerator: IdGenerator = UuidGenerator
+        var emaEventStoreFactory: ((Context?) -> EmaEventStore)? = null
 
         fun resetDefaults() {
             clientFactory = null
@@ -57,6 +58,7 @@ class ExportWorker(
             clock = SystemDiagnosticClock
             zoneId = ZoneId.systemDefault()
             idGenerator = UuidGenerator
+            emaEventStoreFactory = null
         }
 
         suspend fun execute(
@@ -79,6 +81,8 @@ class ExportWorker(
             val recordReader = recordReaderFactory?.invoke(client)
                 ?: HealthConnectExportReader(client = client)
 
+            val emaStore = emaEventStoreFactory?.invoke(context) ?: context?.let { emaEventStore(it) }
+
             val coordinator = ExportCoordinator(
                 stateStore = stateStore,
                 recordReader = recordReader,
@@ -86,6 +90,7 @@ class ExportWorker(
                 clock = clock,
                 zoneId = zoneId,
                 idGenerator = idGenerator,
+                emaEventStore = emaStore,
             )
 
             val summary = mapCycleResultToSummary(coordinator.export(), now)

@@ -26,21 +26,38 @@ open class ExportBatchSerializer {
 
     open fun serializeToJson(batch: ExportBatch): String {
         val root = JsonObject().apply {
-            add("header", batch.header.toJson())
-            val sortedRecords = batch.records.sortedWith(
-                compareBy(
-                    { it.startTime },
-                    { it.recordType },
-                    { it.endTime },
-                    { it.metadata.recordId ?: it.metadata.clientRecordId ?: "" },
-                    { it.toJson().toString() },
-                ),
-            )
-            val recordsArray = JsonArray()
-            for (record in sortedRecords) {
-                recordsArray.add(record.toJson())
+            addProperty("exportSchemaVersion", 1)
+            addProperty("exportId", batch.header.batchId)
+            addProperty("createdAt", batch.header.createdAt.toString())
+
+            val healthConnectBatch = JsonObject().apply {
+                addProperty("schemaVersion", batch.header.schemaVersion)
+                add("header", batch.header.toJson())
+                val sortedRecords = batch.records.sortedWith(
+                    compareBy(
+                        { it.startTime },
+                        { it.recordType },
+                        { it.endTime },
+                        { it.metadata.recordId ?: it.metadata.clientRecordId ?: "" },
+                        { it.toJson().toString() },
+                    ),
+                )
+                val recordsArray = JsonArray()
+                for (record in sortedRecords) {
+                    recordsArray.add(record.toJson())
+                }
+                add("records", recordsArray)
             }
-            add("records", recordsArray)
+            add("healthConnectBatch", healthConnectBatch)
+
+            val emaEventsArray = JsonArray()
+            val sortedEma = batch.emaEvents.sortedWith(
+                compareBy({ it.scheduledAt }, { it.id }),
+            )
+            for (event in sortedEma) {
+                emaEventsArray.add(emaEventToJson(event))
+            }
+            add("emaEvents", emaEventsArray)
         }
         return gson.toJson(root)
     }
@@ -58,6 +75,87 @@ open class ExportBatchSerializer {
             throw InvalidExportSchemaException("Batch JSON root must be a JSON object", e)
         }
 
+        if (root.has("exportSchemaVersion") || root.has("healthConnectBatch")) {
+            return parseEnvelopeJson(root)
+        }
+
+        if (root.has("header") || (root.has("schemaVersion") && root.has("records"))) {
+            return parseLegacyBatchJson(root)
+        }
+
+        throw InvalidExportSchemaException("Batch JSON missing 'header' object")
+    }
+
+    private fun parseEnvelopeJson(root: JsonObject): ExportBatch {
+        val exportSchemaVersion = root.get("exportSchemaVersion")?.asInt
+            ?: throw InvalidExportSchemaException("Missing 'exportSchemaVersion'")
+        if (exportSchemaVersion != 1) {
+            throw InvalidExportSchemaException("Unsupported exportSchemaVersion: $exportSchemaVersion (expected 1)")
+        }
+        val exportId = root.get("exportId")?.asString?.takeIf(String::isNotBlank)
+            ?: throw InvalidExportSchemaException("Missing or blank 'exportId'")
+        val createdAtStr = root.get("createdAt")?.asString?.takeIf(String::isNotBlank)
+            ?: throw InvalidExportSchemaException("Missing or blank 'createdAt'")
+        val createdAt = try {
+            Instant.parse(createdAtStr)
+        } catch (e: DateTimeException) {
+            throw InvalidExportSchemaException("Invalid createdAt timestamp: $createdAtStr", e)
+        }
+
+        val hcBatchElem = root.get("healthConnectBatch")
+            ?: throw InvalidExportSchemaException("Missing 'healthConnectBatch'")
+        if (!hcBatchElem.isJsonObject) {
+            throw InvalidExportSchemaException("'healthConnectBatch' must be a JSON object")
+        }
+        val hcBatchObj = hcBatchElem.asJsonObject
+        val hcSchemaVersion = hcBatchObj.get("schemaVersion")?.asInt ?: 1
+        if (hcSchemaVersion != 1) {
+            throw InvalidExportSchemaException("Unsupported healthConnectBatch schemaVersion: $hcSchemaVersion (expected 1)")
+        }
+        val recordsArray = hcBatchObj.getAsJsonArray("records")
+            ?: throw InvalidExportSchemaException("Missing 'records' array in healthConnectBatch")
+
+        val records = recordsArray.map { element ->
+            if (!element.isJsonObject) {
+                throw InvalidExportSchemaException("Record item in 'records' array must be a JSON object")
+            }
+            element.asJsonObject.toCanonicalRecord()
+        }
+
+        val header = if (hcBatchObj.has("header") && hcBatchObj.get("header").isJsonObject) {
+            hcBatchObj.getAsJsonObject("header").toBatchHeader()
+        } else {
+            val start = records.minOfOrNull { it.startTime } ?: createdAt
+            val end = records.maxOfOrNull { it.endTime }?.let { if (it == start) it.plusSeconds(1) else it } ?: createdAt.plusSeconds(1)
+            val actualStart = if (start.isBefore(end)) start else end.minusSeconds(1)
+            BatchHeader(
+                schemaVersion = 1,
+                installationId = exportId,
+                batchId = exportId,
+                createdAt = createdAt,
+                timeWindow = TimeWindow(actualStart, end),
+                recordCount = records.size,
+                recordTypes = records.map { it.recordType }.distinct().sorted(),
+            )
+        }
+
+        val emaEvents = if (root.has("emaEvents")) {
+            val emaElem = root.get("emaEvents")
+            if (!emaElem.isJsonArray) {
+                throw InvalidExportSchemaException("'emaEvents' must be a JSON array")
+            }
+            emaElem.asJsonArray.mapIndexed { index, elem ->
+                deserializeEmaEvent(elem.toString())
+                    ?: throw InvalidExportSchemaException("Failed to parse EMA event at index $index: $elem")
+            }
+        } else {
+            emptyList()
+        }
+
+        return ExportBatch(header = header, records = records, emaEvents = emaEvents)
+    }
+
+    private fun parseLegacyBatchJson(root: JsonObject): ExportBatch {
         val headerObj = root.getAsJsonObject("header")
             ?: if (root.has("schemaVersion") && root.has("records")) root else throw InvalidExportSchemaException("Batch JSON missing 'header' object")
         val header = headerObj.toBatchHeader()
@@ -72,7 +170,7 @@ open class ExportBatchSerializer {
             element.asJsonObject.toCanonicalRecord()
         }
 
-        return ExportBatch(header = header, records = records)
+        return ExportBatch(header = header, records = records, emaEvents = emptyList())
     }
 
     open fun serializeToNdjson(batch: ExportBatch): String {

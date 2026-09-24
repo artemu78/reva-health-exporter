@@ -1,0 +1,125 @@
+{
+  "exportSchemaVersion": 1,
+  "exportId": "00000000-0000-4000-8000-000000000001",
+  "createdAt": "2026-09-24T06:00:00Z",
+  "healthConnectBatch": {
+    "schemaVersion": 1,
+    "header": {
+      "schemaVersion": 1,
+      "installationId": "00000000-0000-4000-8000-000000000001",
+      "batchId": "00000000-0000-4000-8000-000000000001",
+      "createdAt": "2026-09-24T06:00:00Z",
+      "timeWindow": {
+        "startInclusive": "2026-09-24T00:00:00Z",
+        "endExclusive": "2026-09-25T00:00:00Z"
+      },
+      "recordCount": 3,
+      "recordTypes": [
+        "exercise_session",
+        "heart_rate",
+        "steps"
+      ],
+      "exportDate": "2026-09-24",
+      "exportTimezone": "Europe/Moscow"
+    },
+    "records": [
+      {
+        "recordType": "exercise_session",
+        "origin": "com.xiaomi.wearable",
+        "startTime": "2026-09-24T05:30:00Z",
+        "startZoneOffset": "+03:00",
+        "endTime": "2026-09-24T05:50:00Z",
+        "endZoneOffset": "+03:00",
+        "exerciseType": 79,
+        "title": "Outdoor Walk",
+        "segments": [
+          {
+            "startTime": "2026-09-24T05:30:00Z",
+            "endTime": "2026-09-24T05:50:00Z",
+            "segmentType": 64,
+            "repetitions": 0
+          }
+        ],
+        "laps": [
+          {
+            "startTime": "2026-09-24T05:30:00Z",
+            "endTime": "2026-09-24T05:50:00Z",
+            "lengthMeters": 1600.0
+          }
+        ]
+      },
+      {
+        "recordType": "heart_rate",
+        "origin": "com.xiaomi.wearable",
+        "startTime": "2026-09-24T05:30:00Z",
+        "startZoneOffset": "+03:00",
+        "endTime": "2026-09-24T05:35:00Z",
+        "endZoneOffset": "+03:00",
+        "samples": [
+          {
+            "time": "2026-09-24T05:31:00Z",
+            "beatsPerMinute": 115
+          },
+          {
+            "time": "2026-09-24T05:33:00Z",
+            "beatsPerMinute": 122
+          }
+        ]
+      },
+      {
+        "recordType": "steps",
+        "origin": "com.xiaomi.wearable",
+        "startTime": "2026-09-24T05:30:00Z",
+        "startZoneOffset": "+03:00",
+        "endTime": "2026-09-24T05:50:00Z",
+        "endZoneOffset": "+03:00",
+        "count": 1850
+      }
+    ]
+  },
+  "emaEvents": [
+    {
+      "schemaVersion": 1,
+      "id": "018f-example-event-001",
+      "scheduleDate": "2026-09-24",
+      "scheduledAt": "2026-09-24T06:00:00Z",
+      "answeredAt": "2026-09-24T06:02:00Z",
+      "status": "answered",
+      "timezone": "Europe/Moscow",
+      "mood": 4,
+      "energy": 3,
+      "focus": 4,
+      "stress": 2,
+      "activity": "exercise_stretching",
+      "activityLabel": "Exercise / stretching",
+      "note": "Morning routine workout",
+      "additionalAnswers": {
+        "clarity": 4
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "id": "018f-example-event-002",
+      "scheduleDate": "2026-09-24",
+      "scheduledAt": "2026-09-24T12:00:00Z",
+      "status": "pending",
+      "timezone": "Europe/Moscow"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "018f-example-event-003",
+      "scheduleDate": "2026-09-24",
+      "scheduledAt": "2026-09-24T18:00:00Z",
+      "status": "dismissed",
+      "timezone": "Europe/Moscow"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "018f-example-event-004",
+      "scheduleDate": "2026-09-24",
+      "scheduledAt": "2026-09-24T21:00:00Z",
+      "status": "expired",
+      "timezone": "Europe/Moscow"
+    }
+  ]
+}

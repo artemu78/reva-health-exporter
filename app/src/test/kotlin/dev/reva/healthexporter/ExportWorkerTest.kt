@@ -273,6 +273,36 @@ class ExportWorkerTest {
         assertEquals("com.xiaomi.wearable", exported.metadata.origin)
     }
 
+    @Test
+    fun scheduledExportIncludesEmaEventsFromEmaStore() = runBlocking {
+        val client = FakeHealthConnectClient()
+        ExportWorker.clientFactory = { client }
+        val emaStore = InMemoryEmaEventStore()
+        val event = EmaEvent(
+            schemaVersion = 1,
+            id = "worker-ema-01",
+            scheduleDate = java.time.LocalDate.parse("2026-08-29"),
+            scheduledAt = Instant.parse("2026-08-29T10:00:00Z"),
+            answeredAt = Instant.parse("2026-08-29T10:02:00Z"),
+            answers = EmaAnswers(mood = 5, energy = 4, focus = 4, stress = 1),
+            activity = "working",
+            activityLabel = "Deep Work",
+            note = null,
+            status = EmaResponseStatus.ANSWERED,
+            timezone = ZoneId.systemDefault().id,
+        )
+        emaStore.save(event)
+        ExportWorker.emaEventStoreFactory = { emaStore }
+
+        val result = ExportWorker.execute(context = null)
+
+        assertTrue(result is ListenableWorker.Result.Success)
+        val exported = destination.uploadedBatches.single()
+        assertEquals(1, exported.emaEvents.size)
+        assertEquals("worker-ema-01", exported.emaEvents.single().id)
+        assertEquals(EmaResponseStatus.ANSWERED, exported.emaEvents.single().status)
+    }
+
     private suspend fun insertTrustedRecords(client: FakeHealthConnectClient) {
         val records = createRecords()
         client.setPackageName("com.xiaomi.wearable")

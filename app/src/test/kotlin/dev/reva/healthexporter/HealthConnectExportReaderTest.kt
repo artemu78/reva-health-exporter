@@ -439,4 +439,50 @@ class HealthConnectExportReaderTest {
             runBlocking { reader.readRecords(window) }
         }
     }
+
+    @Test
+    fun readsExerciseSessionsFromTrustedXiaomiWearableOrigin() = runBlocking {
+        val client = FakeHealthConnectClient()
+        client.setPackageName("com.xiaomi.wearable")
+        val exerciseRecord = androidx.health.connect.client.records.ExerciseSessionRecord(
+            startTime = Instant.parse("2026-08-29T10:00:00Z"),
+            startZoneOffset = ZoneOffset.ofHours(3),
+            endTime = Instant.parse("2026-08-29T10:45:00Z"),
+            endZoneOffset = ZoneOffset.ofHours(3),
+            exerciseType = androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_WALKING,
+            title = "Morning Walk",
+            metadata = Metadata.manualEntry(clientRecordId = "workout_01"),
+        )
+        client.insertRecords(listOf<Record>(exerciseRecord))
+
+        val reader = HealthConnectExportReader(client = client)
+        val records = reader.readRecords(window)
+
+        assertEquals(1, records.size)
+        val exercise = records.first() as CanonicalExerciseSessionRecord
+        assertEquals("com.xiaomi.wearable", exercise.metadata.origin)
+        assertEquals("Morning Walk", exercise.title)
+        assertEquals(androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_WALKING, exercise.exerciseType)
+    }
+
+    @Test
+    fun ignoresExerciseSessionsFromUntrustedOrigin() = runBlocking {
+        val client = FakeHealthConnectClient()
+        client.setPackageName("com.untrusted.fitnessapp")
+        val exerciseRecord = androidx.health.connect.client.records.ExerciseSessionRecord(
+            startTime = Instant.parse("2026-08-29T10:00:00Z"),
+            startZoneOffset = ZoneOffset.ofHours(3),
+            endTime = Instant.parse("2026-08-29T10:45:00Z"),
+            endZoneOffset = ZoneOffset.ofHours(3),
+            exerciseType = androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
+            title = "Untrusted Run",
+            metadata = Metadata.manualEntry(clientRecordId = "untrusted_workout"),
+        )
+        client.insertRecords(listOf<Record>(exerciseRecord))
+
+        val reader = HealthConnectExportReader(client = client)
+        val records = reader.readRecords(window)
+
+        assertTrue("Untrusted exercise sessions must be filtered out", records.isEmpty())
+    }
 }

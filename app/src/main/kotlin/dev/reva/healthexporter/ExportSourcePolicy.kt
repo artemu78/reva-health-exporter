@@ -1,6 +1,7 @@
 package dev.reva.healthexporter
 
 import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.Record
@@ -18,6 +19,7 @@ object ExportSourcePolicy {
         HeartRateRecord::class to XIAOMI_WEARABLE_PACKAGE,
         SleepSessionRecord::class to XIAOMI_WEARABLE_PACKAGE,
         OxygenSaturationRecord::class to XIAOMI_WEARABLE_PACKAGE,
+        ExerciseSessionRecord::class to XIAOMI_WEARABLE_PACKAGE,
         DistanceRecord::class to GOOGLE_FIT_PACKAGE,
         TotalCaloriesBurnedRecord::class to GOOGLE_FIT_PACKAGE,
     )

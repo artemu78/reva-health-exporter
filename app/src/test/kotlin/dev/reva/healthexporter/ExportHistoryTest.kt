@@ -215,6 +215,43 @@ class ExportHistoryTest {
     }
 
     @Test
+    fun manualBackfillIncludesEmaEventsForSelectedDate() = runBlocking {
+        val snapshots = listOf(sampleRecord(Instant.parse("2026-09-04T06:00:00Z"), Instant.parse("2026-09-04T06:54:00Z")))
+        val destination = RecordingDestination()
+        val emaStore = InMemoryEmaEventStore()
+        val emaEvent = EmaEvent(
+            schemaVersion = 1,
+            id = "backfill-ema-1",
+            scheduleDate = LocalDate.parse("2026-09-04"),
+            scheduledAt = Instant.parse("2026-09-04T08:00:00Z"),
+            answeredAt = Instant.parse("2026-09-04T08:02:00Z"),
+            answers = EmaAnswers(mood = 4, energy = 4, focus = 4, stress = 2),
+            activity = "walking",
+            activityLabel = "Walking",
+            note = null,
+            status = EmaResponseStatus.ANSWERED,
+            timezone = moscow.id,
+        )
+        emaStore.save(emaEvent)
+
+        val coordinator = ManualBackfillCoordinator(
+            exportStateStore = InMemoryExportStateStore("installation-test"),
+            historyStore = InMemoryExportHistoryStore(),
+            recordReader = RecordingReader(snapshots),
+            destination = destination,
+            destinationKey = "destination-a",
+            emaEventStore = emaStore,
+        )
+
+        val result = coordinator.uploadDays(listOf(LocalDate.parse("2026-09-04")), moscow)
+
+        assertTrue(result is ManualBackfillResult.Success)
+        val batch = destination.uploadedBatches.single()
+        assertEquals(1, batch.emaEvents.size)
+        assertEquals("backfill-ema-1", batch.emaEvents.single().id)
+    }
+
+    @Test
     fun retryKeepsStableBatchIdentityWithoutDuplicateLogicalUpload() = runBlocking {
         val history = InMemoryExportHistoryStore()
         val destination = RecordingDestination().apply { failNext = true }
@@ -317,10 +354,13 @@ class ExportHistoryTest {
         destinationKey: String = "destination-a",
     ) = ExportHistoryEntry(id, window, status, destinationKey, Instant.parse("2026-08-31T00:00:00Z"))
 
-    private fun sampleRecord() = CanonicalStepsRecord(
-        startTime = Instant.parse("2026-08-30T08:00:00Z"),
+    private fun sampleRecord(
+        startTime: Instant = Instant.parse("2026-08-30T08:00:00Z"),
+        endTime: Instant = Instant.parse("2026-08-30T09:00:00Z"),
+    ) = CanonicalStepsRecord(
+        startTime = startTime,
         startZoneOffset = null,
-        endTime = Instant.parse("2026-08-30T09:00:00Z"),
+        endTime = endTime,
         endZoneOffset = null,
         metadata = RecordMetadata(recordId = "synthetic", origin = "synthetic.test"),
         count = 123,
