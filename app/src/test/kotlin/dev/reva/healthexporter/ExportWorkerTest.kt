@@ -15,12 +15,15 @@ import androidx.work.ListenableWorker
 import java.io.IOException
 import java.time.Instant
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
+import java.util.concurrent.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -62,6 +65,7 @@ class ExportWorkerTest {
     @Before
     fun setUp() {
         ExportWorker.clock = clock
+        ExportWorker.zoneId = ZoneOffset.UTC
         ExportWorker.stateStoreFactory = { inMemoryStore }
         ExportWorker.destinationFactory = { destination }
         ExportWorker.idGenerator = idGen
@@ -271,6 +275,63 @@ class ExportWorkerTest {
         val exported = destination.uploadedBatches.single().records.single() as CanonicalStepsRecord
         assertEquals(200L, exported.count)
         assertEquals("com.xiaomi.wearable", exported.metadata.origin)
+    }
+
+    @Test
+    fun scheduledExportIncludesEmaEventsFromEmaStore() = runBlocking {
+        val client = FakeHealthConnectClient()
+        ExportWorker.clientFactory = { client }
+        val emaStore = InMemoryEmaEventStore()
+        val event = EmaEvent(
+            schemaVersion = 1,
+            id = "worker-ema-01",
+            scheduleDate = java.time.LocalDate.parse("2026-08-29"),
+            scheduledAt = Instant.parse("2026-08-29T10:00:00Z"),
+            answeredAt = Instant.parse("2026-08-29T10:02:00Z"),
+            answers = EmaAnswers(mood = 5, energy = 4, focus = 4, stress = 1),
+            activity = "working",
+            activityLabel = "Deep Work",
+            note = null,
+            status = EmaResponseStatus.ANSWERED,
+            timezone = "UTC",
+        )
+        emaStore.save(event)
+        ExportWorker.emaEventStoreFactory = { emaStore }
+
+        val result = ExportWorker.execute(context = null)
+
+        assertTrue(result is ListenableWorker.Result.Success)
+        val exported = destination.uploadedBatches.single()
+        assertEquals(1, exported.emaEvents.size)
+        assertEquals("worker-ema-01", exported.emaEvents.single().id)
+        assertEquals(EmaResponseStatus.ANSWERED, exported.emaEvents.single().status)
+    }
+
+    @Test
+    fun retryableFailureWhenEmaEventStoreFactoryThrowsException() = runBlocking {
+        val client = FakeHealthConnectClient()
+        ExportWorker.clientFactory = { client }
+        ExportWorker.emaEventStoreFactory = { throw RuntimeException("DB disk I/O error") }
+
+        val result = ExportWorker.execute(context = null)
+
+        assertTrue(result is ListenableWorker.Result.Retry)
+        val summary = inMemoryStore.getLastExecutionSummary()
+        assertEquals(ExportOutcome.RETRYABLE_FAILURE, summary?.outcome)
+        assertTrue(summary?.message?.contains("Failed to initialize EMA event store") == true)
+    }
+
+    @Test
+    fun cancellationPropagatedWhenEmaEventStoreFactoryThrowsCancellation() {
+        val client = FakeHealthConnectClient()
+        ExportWorker.clientFactory = { client }
+        ExportWorker.emaEventStoreFactory = { throw CancellationException("Worker cancelled") }
+
+        assertThrows(CancellationException::class.java) {
+            runBlocking {
+                ExportWorker.execute(context = null)
+            }
+        }
     }
 
     private suspend fun insertTrustedRecords(client: FakeHealthConnectClient) {

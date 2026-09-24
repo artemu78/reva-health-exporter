@@ -54,6 +54,7 @@ class ExportCoordinator(
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     private val idGenerator: IdGenerator = UuidGenerator,
     private val config: ExportCoordinatorConfig = ExportCoordinatorConfig(),
+    private val emaEventStore: EmaEventStore? = null,
 ) {
     private val mutex = Mutex()
 
@@ -130,6 +131,7 @@ class ExportCoordinator(
         }
     }
 
+    @Suppress("kotlin:S6619")
     private fun resolveTimeWindow(now: Instant): Pair<TimeWindow?, ExportCycleResult?> {
         val lastCheckpoint = try {
             stateStore.getLastCheckpoint()
@@ -216,9 +218,26 @@ class ExportCoordinator(
             recordTypes = recordTypes,
         )
 
+        val emaEvents = if (emaEventStore != null) {
+            val windowStartDate = timeWindow.startInclusive.atZone(zoneId).toLocalDate()
+            val windowEndDate = timeWindow.endExclusive.atZone(zoneId).let { zdt ->
+                if (zdt.toLocalTime() == java.time.LocalTime.MIDNIGHT) {
+                    zdt.toLocalDate()
+                } else {
+                    zdt.toLocalDate().plusDays(1)
+                }
+            }
+            emaEventStore.all().filter { event ->
+                !event.scheduleDate.isBefore(windowStartDate) && event.scheduleDate.isBefore(windowEndDate)
+            }
+        } else {
+            emptyList()
+        }
+
         return ExportBatch(
             header = header,
             records = deduplicated,
+            emaEvents = emaEvents,
         )
     }
 

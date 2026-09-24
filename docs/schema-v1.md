@@ -10,7 +10,9 @@ Reva Health Exporter exports health data batches in standard uncompressed **JSON
 
 ### Batch Structure: JSON Envelope
 
-Each batch file is a standalone JSON document structured as:
+Each batch file is exported within the [Reva Export Envelope v1](export-envelope-v1.md) containing the Health Connect batch (`healthConnectBatch`) and EMA self-reported observations (`emaEvents`).
+
+For consumers parsing health data alone, the inner `healthConnectBatch` document is structured as:
 
 ```json
 {
@@ -193,10 +195,11 @@ Every canonical record contains standard timing and origin metadata:
 
 ### 5.6. Exercise Session (`recordType: "exercise_session"`)
 - **Structure:** Workout session with `exerciseType` code (e.g. `79` for walking, `56` for running), optional title/notes, segments, and laps (with length in canonical meters).
+- **Origin Policy:** Filtered by trusted wearable package `com.xiaomi.wearable`.
 ```json
 {
   "recordType": "exercise_session",
-  "origin": "com.mi.health",
+  "origin": "com.xiaomi.wearable",
   "startTime": "2026-08-29T18:00:00Z",
   "startZoneOffset": "+03:00",
   "endTime": "2026-08-29T18:45:00Z",

@@ -378,6 +378,7 @@ data class BatchHeader(
 data class ExportBatch(
     val header: BatchHeader,
     val records: List<CanonicalRecord>,
+    val emaEvents: List<EmaEvent> = emptyList(),
 ) {
     init {
         if (header.recordCount != records.size) {

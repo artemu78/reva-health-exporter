@@ -68,6 +68,7 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("com.networknt:json-schema-validator:1.5.1")
     testImplementation("androidx.work:work-testing:2.10.0")
     testImplementation("androidx.health.connect:connect-testing:1.0.0-alpha03") {
         exclude(group = "androidx.health.connect", module = "connect-client")

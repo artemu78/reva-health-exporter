@@ -204,8 +204,8 @@ class EmaCheckInService(
     }
 }
 
-fun serializeEmaEvent(event: EmaEvent): String {
-    val json = JsonObject().apply {
+fun emaEventToJson(event: EmaEvent): JsonObject {
+    return JsonObject().apply {
         addProperty("schemaVersion", event.schemaVersion)
         addProperty("id", event.id)
         addProperty("scheduleDate", event.scheduleDate.toString())
@@ -228,7 +228,10 @@ fun serializeEmaEvent(event: EmaEvent): String {
         addProperty("status", event.status.wireValue)
         addProperty("timezone", event.timezone)
     }
-    return Gson().toJson(json)
+}
+
+fun serializeEmaEvent(event: EmaEvent): String {
+    return Gson().toJson(emaEventToJson(event))
 }
 
 fun deserializeEmaEvent(serialized: String): EmaEvent? {

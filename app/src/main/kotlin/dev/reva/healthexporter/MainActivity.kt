@@ -560,6 +560,7 @@ class MainActivity : ComponentActivity() {
                     GoogleDriveDestination(googleDriveGatewayFactory(this@MainActivity, auth.accountId)),
                     key,
                     pendingStore = SharedPreferencesManualBackfillPendingStore(this@MainActivity),
+                    emaEventStore = emaEventStore(this@MainActivity),
                 ).uploadDays(dates, ZoneId.systemDefault()) { date, uploaded ->
                     if (uploaded) exportHistoryPresenter.markDateUploaded(date)
                     renderExportHistory()

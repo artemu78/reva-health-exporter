@@ -274,6 +274,7 @@ class ManualBackfillCoordinator(
     private val destinationKey: String,
     private val clock: DiagnosticClock = SystemDiagnosticClock,
     private val pendingStore: ManualBackfillPendingStore = InMemoryManualBackfillPendingStore(),
+    private val emaEventStore: EmaEventStore? = null,
 ) {
     private sealed interface WindowUploadResult {
         data class Confirmed(val entry: ExportHistoryEntry) : WindowUploadResult
@@ -323,7 +324,7 @@ class ManualBackfillCoordinator(
     private suspend fun uploadWindow(window: TimeWindow, zoneId: ZoneId): WindowUploadResult {
         val batchId = stableBackfillBatchId(destinationKey, window)
         val now = clock.now(zoneId).toInstant()
-        val batch = when (val preparation = prepareBatch(batchId, window, now)) {
+        val batch = when (val preparation = prepareBatch(batchId, window, now, zoneId)) {
             is BatchPreparation.Ready -> preparation.batch
             BatchPreparation.Empty -> return WindowUploadResult.Empty
             is BatchPreparation.Stopped -> return WindowUploadResult.Stopped(preparation.result)
@@ -333,7 +334,7 @@ class ManualBackfillCoordinator(
         return classifyUpload(destination.upload(batch), pending, zoneId)
     }
 
-    private suspend fun prepareBatch(batchId: String, window: TimeWindow, now: Instant): BatchPreparation {
+    private suspend fun prepareBatch(batchId: String, window: TimeWindow, now: Instant, zoneId: ZoneId): BatchPreparation {
         pendingStore.get(destinationKey, batchId)?.let { return BatchPreparation.Ready(it) }
         val records = when (val read = readRecords(window)) {
             is RecordReadResult.Success -> read.records
@@ -341,8 +342,23 @@ class ManualBackfillCoordinator(
                 ManualBackfillResult.Retrying(batchId, read.message),
             )
         }
-        if (records.isEmpty()) return BatchPreparation.Empty
-        val batch = buildBatch(batchId, window, now, records)
+        val emaEvents = if (emaEventStore != null) {
+            val windowStartDate = window.startInclusive.atZone(zoneId).toLocalDate()
+            val windowEndDate = window.endExclusive.atZone(zoneId).let { zdt ->
+                if (zdt.toLocalTime() == java.time.LocalTime.MIDNIGHT) {
+                    zdt.toLocalDate()
+                } else {
+                    zdt.toLocalDate().plusDays(1)
+                }
+            }
+            emaEventStore.all().filter { event ->
+                !event.scheduleDate.isBefore(windowStartDate) && event.scheduleDate.isBefore(windowEndDate)
+            }
+        } else {
+            emptyList()
+        }
+        if (records.isEmpty() && emaEvents.isEmpty()) return BatchPreparation.Empty
+        val batch = buildBatch(batchId, window, now, records, emaEvents)
         pendingStore.save(destinationKey, batch)
         return BatchPreparation.Ready(batch)
     }
@@ -364,6 +380,7 @@ class ManualBackfillCoordinator(
         window: TimeWindow,
         now: Instant,
         records: List<CanonicalRecord>,
+        emaEvents: List<EmaEvent> = emptyList(),
     ): ExportBatch = ExportBatch(
         BatchHeader(
             installationId = exportStateStore.getInstallationId(),
@@ -374,6 +391,7 @@ class ManualBackfillCoordinator(
             recordTypes = records.map { it.recordType }.distinct().sorted(),
         ),
         records,
+        emaEvents,
     )
 
     private fun classifyUpload(

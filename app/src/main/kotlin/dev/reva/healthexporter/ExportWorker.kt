@@ -8,6 +8,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import java.time.Instant
 import java.time.ZoneId
+import java.util.concurrent.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -43,6 +44,7 @@ class ExportWorker(
         var clock: DiagnosticClock = SystemDiagnosticClock
         var zoneId: ZoneId = ZoneId.systemDefault()
         var idGenerator: IdGenerator = UuidGenerator
+        var emaEventStoreFactory: ((Context?) -> EmaEventStore)? = null
 
         fun resetDefaults() {
             clientFactory = null
@@ -57,6 +59,7 @@ class ExportWorker(
             clock = SystemDiagnosticClock
             zoneId = ZoneId.systemDefault()
             idGenerator = UuidGenerator
+            emaEventStoreFactory = null
         }
 
         suspend fun execute(
@@ -79,6 +82,11 @@ class ExportWorker(
             val recordReader = recordReaderFactory?.invoke(client)
                 ?: HealthConnectExportReader(client = client)
 
+            val emaStore = when (val res = resolveEmaStore(context, now, stateStore)) {
+                is Resolution.Success -> res.value
+                is Resolution.Failure -> return@withLock mapSummaryToWorkerResult(res.summary)
+            }
+
             val coordinator = ExportCoordinator(
                 stateStore = stateStore,
                 recordReader = recordReader,
@@ -86,6 +94,7 @@ class ExportWorker(
                 clock = clock,
                 zoneId = zoneId,
                 idGenerator = idGenerator,
+                emaEventStore = emaStore,
             )
 
             val summary = mapCycleResultToSummary(coordinator.export(), now)
@@ -115,6 +124,8 @@ class ExportWorker(
                 else -> error("Context or clientFactory must be provided")
             }
             Resolution.Success(client)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
         } catch (e: Exception) {
             val summary = ExportExecutionSummary(
                 outcome = ExportOutcome.USER_ACTION_REQUIRED,
@@ -137,10 +148,31 @@ class ExportWorker(
                 else -> error("Context or destinationFactory must be provided")
             }
             Resolution.Success(destination)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
         } catch (e: Exception) {
             val summary = ExportExecutionSummary(
                 outcome = ExportOutcome.USER_ACTION_REQUIRED,
                 message = "Failed to configure export destination: ${e.message}",
+                executionTimestamp = now,
+            )
+            stateStore.saveExecutionSummary(summary)
+            Resolution.Failure(summary)
+        }
+
+        private fun resolveEmaStore(
+            context: Context?,
+            now: Instant,
+            stateStore: ExportStateStore,
+        ): Resolution<EmaEventStore?> = try {
+            val store = emaEventStoreFactory?.invoke(context) ?: context?.let { emaEventStore(it) }
+            Resolution.Success(store)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (e: Exception) {
+            val summary = ExportExecutionSummary(
+                outcome = ExportOutcome.RETRYABLE_FAILURE,
+                message = "Failed to initialize EMA event store: ${e.message}",
                 executionTimestamp = now,
             )
             stateStore.saveExecutionSummary(summary)

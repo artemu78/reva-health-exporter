@@ -76,16 +76,20 @@ class ExportCoordinatorTest {
         initialLookback: Duration = Duration.ofDays(1),
         maxBatchDuration: Duration? = Duration.ofDays(1),
         exportStateStore: ExportStateStore = stateStore,
+        emaStore: EmaEventStore? = null,
+        zoneId: ZoneId = ZoneOffset.UTC,
     ): ExportCoordinator = ExportCoordinator(
         stateStore = exportStateStore,
         recordReader = reader,
         destination = destination,
         clock = clock,
+        zoneId = zoneId,
         idGenerator = idGen,
         config = ExportCoordinatorConfig(
             initialLookbackPeriod = initialLookback,
             maxBatchDuration = maxBatchDuration,
         ),
+        emaEventStore = emaStore,
     )
 
     private fun createSampleRecord(
@@ -631,5 +635,70 @@ class ExportCoordinatorTest {
         assertTrue(destination.uploadedBatches.isEmpty())
         assertNull(stateStore.getPendingBatch())
         assertNull(stateStore.getLastCheckpoint())
+    }
+
+    @Test
+    fun exportsBatchWithEmaEventsWhenEmaStoreProvided() = runBlocking {
+        val emaStore = InMemoryEmaEventStore()
+        val event = EmaEvent(
+            schemaVersion = 1,
+            id = "ema-01",
+            scheduleDate = java.time.LocalDate.parse("2026-08-29"),
+            scheduledAt = Instant.parse("2026-08-29T08:00:00Z"),
+            answeredAt = Instant.parse("2026-08-29T08:02:00Z"),
+            answers = EmaAnswers(mood = 4, energy = 3, focus = 4, stress = 2),
+            activity = "exercise_stretching",
+            activityLabel = "Exercise / stretching",
+            note = "Morning workout",
+            status = EmaResponseStatus.ANSWERED,
+            timezone = "UTC",
+        )
+        emaStore.save(event)
+
+        val coordinator = createCoordinator(emaStore = emaStore)
+        val result = coordinator.export()
+
+        assertTrue(result is ExportCycleResult.Success)
+        val uploaded = destination.uploadedBatches.single()
+        assertEquals(1, uploaded.emaEvents.size)
+        assertEquals("ema-01", uploaded.emaEvents.single().id)
+        assertEquals(EmaResponseStatus.ANSWERED, uploaded.emaEvents.single().status)
+    }
+
+    @Test
+    fun retainsEmaEventsInPendingBatchWhenUploadFailsAndReExportsOnRetry() = runBlocking {
+        val emaStore = InMemoryEmaEventStore()
+        val event = EmaEvent(
+            schemaVersion = 1,
+            id = "ema-retry-01",
+            scheduleDate = java.time.LocalDate.parse("2026-08-29"),
+            scheduledAt = Instant.parse("2026-08-29T08:00:00Z"),
+            answeredAt = null,
+            answers = null,
+            activity = null,
+            activityLabel = null,
+            note = null,
+            status = EmaResponseStatus.PENDING,
+            timezone = "UTC",
+        )
+        emaStore.save(event)
+
+        destination.uploadResult = UploadResult.Failure("Network down", isRetryable = true)
+        val coordinator = createCoordinator(emaStore = emaStore)
+        val failureResult = coordinator.export()
+
+        assertTrue(failureResult is ExportCycleResult.RetryableFailure)
+        val pending = stateStore.getPendingBatch()
+        assertNotNull(pending)
+        assertEquals(1, pending!!.emaEvents.size)
+        assertEquals("ema-retry-01", pending.emaEvents.single().id)
+
+        // Retry with restored connection
+        destination.uploadResult = null
+        val successResult = coordinator.export()
+        assertTrue(successResult is ExportCycleResult.Success)
+        assertEquals(1, destination.uploadedBatches.size)
+        assertEquals("ema-retry-01", destination.uploadedBatches.single().emaEvents.single().id)
+        assertNull(stateStore.getPendingBatch())
     }
 }

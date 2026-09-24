@@ -1,0 +1,319 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reva.dev/schemas/export-envelope-v1.schema.json",
+  "title": "Reva Health & EMA Export Envelope v1",
+  "description": "Top-level combined export payload packaging Health Connect batches and Reva EMA check-in observations. Unknown properties are allowed for forward-compatible extensions.",
+  "type": "object",
+  "required": [
+    "exportSchemaVersion",
+    "exportId",
+    "createdAt",
+    "healthConnectBatch",
+    "emaEvents"
+  ],
+  "properties": {
+    "exportSchemaVersion": {
+      "const": 1
+    },
+    "exportId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "healthConnectBatch": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "records"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "header": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": { "type": "integer" },
+            "installationId": { "type": "string" },
+            "batchId": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "timeWindow": {
+              "type": "object",
+              "required": ["startInclusive", "endExclusive"],
+              "properties": {
+                "startInclusive": { "type": "string", "format": "date-time" },
+                "endExclusive": { "type": "string", "format": "date-time" }
+              }
+            },
+            "recordCount": { "type": "integer", "minimum": 0 },
+            "recordTypes": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "exportDate": { "type": "string" },
+            "exportTimezone": { "type": "string" },
+            "dailyIdentity": { "type": "string" }
+          },
+          "additionalProperties": true
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "recordType",
+              "origin",
+              "startTime",
+              "endTime"
+            ],
+            "properties": {
+              "recordType": {
+                "type": "string",
+                "enum": [
+                  "steps",
+                  "heart_rate",
+                  "distance",
+                  "total_calories_burned",
+                  "sleep_session",
+                  "exercise_session",
+                  "resting_heart_rate",
+                  "oxygen_saturation"
+                ]
+              },
+              "origin": {
+                "type": "string",
+                "minLength": 1
+              },
+              "startTime": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "startZoneOffset": {
+                "type": "string"
+              },
+              "endTime": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "endZoneOffset": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "samples": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["time", "beatsPerMinute"],
+                  "properties": {
+                    "time": { "type": "string", "format": "date-time" },
+                    "beatsPerMinute": { "type": "integer", "minimum": 1, "maximum": 300 }
+                  }
+                }
+              },
+              "distanceMeters": {
+                "type": "number",
+                "minimum": 0.0
+              },
+              "energyKilocalories": {
+                "type": "number",
+                "minimum": 0.0
+              },
+              "title": {
+                "type": "string"
+              },
+              "notes": {
+                "type": "string"
+              },
+              "stages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["startTime", "endTime", "stage"],
+                  "properties": {
+                    "startTime": { "type": "string", "format": "date-time" },
+                    "endTime": { "type": "string", "format": "date-time" },
+                    "stage": { "type": "integer" }
+                  }
+                }
+              },
+              "exerciseType": {
+                "type": "integer"
+              },
+              "segments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["startTime", "endTime", "segmentType", "repetitions"],
+                  "properties": {
+                    "startTime": { "type": "string", "format": "date-time" },
+                    "endTime": { "type": "string", "format": "date-time" },
+                    "segmentType": { "type": "integer" },
+                    "repetitions": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              },
+              "laps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["startTime", "endTime"],
+                  "properties": {
+                    "startTime": { "type": "string", "format": "date-time" },
+                    "endTime": { "type": "string", "format": "date-time" },
+                    "lengthMeters": { "type": "number", "minimum": 0.0 }
+                  }
+                }
+              },
+              "beatsPerMinute": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 300
+              },
+              "percentage": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 100.0
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "emaEvents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "id",
+          "scheduleDate",
+          "scheduledAt",
+          "status",
+          "timezone"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "scheduleDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "Z$"
+          },
+          "answeredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mood": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "energy": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "focus": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "stress": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "additionalAnswers": {
+            "type": "object",
+            "propertyNames": {
+              "not": {
+                "enum": ["mood", "energy", "focus", "stress"]
+              }
+            },
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "activity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "activityLabel": {
+            "type": "string",
+            "minLength": 1
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280
+          },
+          "status": {
+            "enum": ["pending", "answered", "dismissed", "expired"]
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "answered"
+                }
+              },
+              "required": ["status"]
+            },
+            "then": {
+              "required": [
+                "answeredAt",
+                "mood",
+                "energy",
+                "focus",
+                "stress",
+                "activity"
+              ]
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  { "required": ["answeredAt"] },
+                  { "required": ["mood"] },
+                  { "required": ["energy"] },
+                  { "required": ["focus"] },
+                  { "required": ["stress"] },
+                  { "required": ["activity"] },
+                  { "required": ["activityLabel"] },
+                  { "required": ["note"] },
+                  { "required": ["additionalAnswers"] }
+                ]
+              }
+            }
+          }
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
