@@ -131,6 +131,7 @@ class ExportCoordinator(
         }
     }
 
+    @Suppress("kotlin:S6619")
     private fun resolveTimeWindow(now: Instant): Pair<TimeWindow?, ExportCycleResult?> {
         val lastCheckpoint = try {
             stateStore.getLastCheckpoint()
@@ -147,11 +148,7 @@ class ExportCoordinator(
             )
         }
 
-        val startInclusive = if (lastCheckpoint != null) {
-            lastCheckpoint.lastWindowEnd
-        } else {
-            now.minus(config.initialLookbackPeriod)
-        }
+        val startInclusive = lastCheckpoint?.lastWindowEnd ?: now.minus(config.initialLookbackPeriod)
         val maxDuration = config.maxBatchDuration
         val endExclusive = if (maxDuration != null) {
             val clamped = startInclusive.plus(maxDuration)
