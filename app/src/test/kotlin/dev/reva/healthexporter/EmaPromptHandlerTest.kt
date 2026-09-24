@@ -57,7 +57,7 @@ class EmaPromptHandlerTest {
     }
 
     @Test
-    fun defersDeliveryWhenWorkerRunsForLaterEventWhileEarlierEventIsPending() {
+    fun supersedesEarlierPendingPromptWhenLaterPromptIsDelivered() {
         val store = InMemoryEmaEventStore().apply {
             save(EmaEvent.pending("event-early", scheduledAt, ZoneId.of("UTC")))
             save(EmaEvent.pending("event-late", scheduledAt.plusSeconds(3600), ZoneId.of("UTC")))
@@ -70,43 +70,30 @@ class EmaPromptHandlerTest {
             now = scheduledAt.plusSeconds(3600),
         )
 
-        assertTrue(!deliveredLate)
-        assertTrue(notifications.shown.isEmpty())
+        assertTrue(deliveredLate)
+        assertEquals(listOf("event-late"), notifications.shown)
+        assertEquals(listOf("event-early"), notifications.cancelled)
+        assertEquals(EmaResponseStatus.EXPIRED, store.get("event-early")?.status)
         assertEquals(EmaResponseStatus.PENDING, store.get("event-late")?.status)
+    }
+
+    @Test
+    fun doesNotDeliverStalePromptWhenLaterPromptAlreadyDue() {
+        val store = InMemoryEmaEventStore().apply {
+            save(EmaEvent.pending("event-early", scheduledAt, ZoneId.of("UTC")))
+            save(EmaEvent.pending("event-late", scheduledAt.plusSeconds(3600), ZoneId.of("UTC")))
+        }
+        val notifications = RecordingEmaNotificationGateway()
+        val handler = EmaPromptHandler(store, notifications)
 
         val deliveredEarly = handler.deliver(
             eventId = "event-early",
             now = scheduledAt.plusSeconds(3600),
         )
 
-        assertTrue(deliveredEarly)
-        assertEquals(listOf("event-early"), notifications.shown)
-    }
-
-    @Test
-    fun defersSimultaneousDueEventUntilActiveEventReachesTerminalStatus() {
-        val store = InMemoryEmaEventStore().apply {
-            save(EmaEvent.pending("event-a", scheduledAt, ZoneId.of("UTC")))
-            save(EmaEvent.pending("event-b", scheduledAt, ZoneId.of("UTC")))
-        }
-        val notifications = RecordingEmaNotificationGateway()
-        val handler = EmaPromptHandler(store, notifications)
-
-        val deliveredBFirst = handler.deliver("event-b", scheduledAt)
-        assertTrue(!deliveredBFirst)
+        assertTrue(!deliveredEarly)
         assertTrue(notifications.shown.isEmpty())
-        assertEquals(EmaResponseStatus.PENDING, store.get("event-b")?.status)
-
-        val deliveredA = handler.deliver("event-a", scheduledAt)
-        assertTrue(deliveredA)
-        assertEquals(listOf("event-a"), notifications.shown)
-
-        handler.dismiss("event-a")
-        assertEquals(EmaResponseStatus.DISMISSED, store.get("event-a")?.status)
-
-        val deliveredBAfter = handler.deliver("event-b", scheduledAt)
-        assertTrue(deliveredBAfter)
-        assertEquals(listOf("event-a", "event-b"), notifications.shown)
+        assertEquals(EmaResponseStatus.EXPIRED, store.get("event-early")?.status)
     }
 }
 

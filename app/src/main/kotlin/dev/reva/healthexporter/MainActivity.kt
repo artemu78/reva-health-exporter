@@ -109,6 +109,8 @@ class MainActivity : ComponentActivity() {
         matrixWindowsBack = savedInstanceState?.getInt("matrix_window", 0) ?: 0
         val initialPage = savedInstanceState?.getInt("matrix_page", R.id.matrix_records) ?: R.id.matrix_records
         val initialHistory = savedInstanceState?.getIntegerArrayList("matrix_page_history").orEmpty()
+        restoredMatrixSelection = savedInstanceState?.getStringArrayList("matrix_selection")
+            .orEmpty().map(LocalDate::parse).toSet()
         navigator = ScreenNavigator(
             mainScreen = R.id.matrix_records,
             initialScreen = initialPage,
@@ -330,16 +332,22 @@ class MainActivity : ComponentActivity() {
             activityCategories = configuredCategories,
         )
         emaConfigStore.save(config)
-        EmaScheduleCoordinator(emaStore, WorkManagerEmaGateway(this))
-            .reconfigure(Instant.now(), ZoneId.systemDefault(), config)
+        EmaScheduleCoordinator(
+            store = emaStore,
+            workGateway = WorkManagerEmaGateway(this),
+            promptHandler = EmaPromptHandler(emaStore, AndroidEmaNotificationGateway(this)),
+        ).reconfigure(Instant.now(), ZoneId.systemDefault(), config)
         requestEmaNotificationPermission(config)
         findViewById<TextView>(R.id.ema_settings_status).text = getString(R.string.ema_settings_saved)
     }
 
     private fun reconcileEmaSchedule() {
         val config = emaConfigStore.load()
-        EmaScheduleCoordinator(emaStore, WorkManagerEmaGateway(this))
-            .reconcile(Instant.now(), ZoneId.systemDefault(), config)
+        EmaScheduleCoordinator(
+            store = emaStore,
+            workGateway = WorkManagerEmaGateway(this),
+            promptHandler = EmaPromptHandler(emaStore, AndroidEmaNotificationGateway(this)),
+        ).reconcile(Instant.now(), ZoneId.systemDefault(), config)
         requestEmaNotificationPermission(config)
     }
 

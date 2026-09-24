@@ -10,6 +10,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import java.time.Instant
 
 class EmaCheckInActivity : ComponentActivity() {
@@ -54,6 +55,12 @@ class EmaCheckInActivity : ComponentActivity() {
             EmaPromptHandler(store, notificationFactory(this)).dismiss(eventId)
             finish()
         }
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                EmaPromptHandler(store, notificationFactory(this@EmaCheckInActivity)).dismiss(eventId)
+                finish()
+            }
+        })
     }
 
     private fun bindSlider(sliderId: Int, valueId: Int) {

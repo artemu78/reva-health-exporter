@@ -14,12 +14,25 @@ class EmaPromptHandler(
     fun deliver(eventId: String, now: Instant = Instant.now()): Boolean {
         val event = store.get(eventId) ?: return false
         if (event.status != EmaResponseStatus.PENDING) return false
-        val earliestPending = store.all()
-            .filter { it.status == EmaResponseStatus.PENDING }
-            .minWithOrNull(compareBy({ it.scheduledAt }, { it.id }))
-        if (earliestPending != null && earliestPending.id != eventId) {
+
+        val eventComparator = compareBy<EmaEvent>({ it.scheduledAt }, { it.id })
+        val pendingEvents = store.all().filter { it.status == EmaResponseStatus.PENDING }
+
+        val laterDuePending = pendingEvents.filter {
+            it.id != eventId && eventComparator.compare(it, event) > 0 && !it.scheduledAt.isAfter(now)
+        }
+        if (laterDuePending.isNotEmpty()) {
+            expire(eventId)
             return false
         }
+
+        val earlierPending = pendingEvents.filter {
+            it.id != eventId && eventComparator.compare(it, event) < 0
+        }
+        earlierPending.forEach {
+            expire(it.id)
+        }
+
         notifications.show(eventId)
         return true
     }

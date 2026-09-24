@@ -25,16 +25,24 @@ class EmaScheduleCoordinator(
     private val workGateway: EmaWorkGateway,
     private val planner: EmaSchedulePlanner = EmaSchedulePlanner(),
     private val idGenerator: EmaIdGenerator = EmaIdGenerator { UUID.randomUUID().toString() },
+    private val promptHandler: EmaPromptHandler = EmaPromptHandler(
+        store,
+        object : EmaNotificationGateway {
+            override fun show(eventId: String) = Unit
+            override fun cancel(eventId: String) = Unit
+        },
+    ),
 ) {
     fun reconcile(now: Instant, zoneId: ZoneId, config: EmaConfig) {
         if (!config.notificationsEnabled) {
             workGateway.cancelAll()
             store.all().filter { it.status == EmaResponseStatus.PENDING }.forEach {
-                EmaCheckInService(store).expire(it.id)
+                promptHandler.expire(it.id)
             }
             return
         }
 
+        expireStalePrompts(now, zoneId)
         scheduleDays(now, zoneId, config, replace = false)
         enqueuePending(now)
         workGateway.ensureScheduleRefresh()
@@ -42,12 +50,30 @@ class EmaScheduleCoordinator(
 
     fun reconfigure(now: Instant, zoneId: ZoneId, config: EmaConfig) {
         workGateway.cancelAll()
-        val service = EmaCheckInService(store)
-        store.all().filter { it.status == EmaResponseStatus.PENDING }.forEach { service.expire(it.id) }
+        store.all().filter { it.status == EmaResponseStatus.PENDING }.forEach { promptHandler.expire(it.id) }
         if (!config.notificationsEnabled) return
         scheduleDays(now, zoneId, config, replace = true)
         enqueuePending(now)
         workGateway.ensureScheduleRefresh()
+    }
+
+    private fun expireStalePrompts(now: Instant, zoneId: ZoneId) {
+        val today = now.atZone(zoneId).toLocalDate()
+        val pendingEvents = store.all().filter { it.status == EmaResponseStatus.PENDING }
+
+        pendingEvents.filter { it.scheduleDate < today && !it.scheduledAt.isAfter(now) }.forEach {
+            promptHandler.expire(it.id)
+        }
+
+        val duePending = store.all().filter {
+            it.status == EmaResponseStatus.PENDING && !it.scheduledAt.isAfter(now)
+        }.sortedWith(compareBy({ it.scheduledAt }, { it.id }))
+
+        if (duePending.size > 1) {
+            duePending.dropLast(1).forEach {
+                promptHandler.expire(it.id)
+            }
+        }
     }
 
     private fun scheduleDays(now: Instant, zoneId: ZoneId, config: EmaConfig, replace: Boolean) {
@@ -58,8 +84,7 @@ class EmaScheduleCoordinator(
             }
             if (pendingDifferentZone.isNotEmpty()) {
                 workGateway.cancelAll()
-                val service = EmaCheckInService(store)
-                pendingDifferentZone.forEach { service.expire(it.id) }
+                pendingDifferentZone.forEach { promptHandler.expire(it.id) }
             }
             val alreadyScheduled = store.all().any {
                 it.scheduleDate == date && it.timezone == zoneId.id
@@ -83,24 +108,25 @@ class EmaScheduleCoordinator(
         val pendingEvents = store.all().filter { it.status == EmaResponseStatus.PENDING }
         val duePendingEvents = pendingEvents.filter { !it.scheduledAt.isAfter(now) }
             .sortedWith(compareBy({ it.scheduledAt }, { it.id }))
+        val futurePendingEvents = pendingEvents.filter { it.scheduledAt.isAfter(now) }
 
         if (duePendingEvents.isNotEmpty()) {
-            val earliestDue = duePendingEvents.first()
+            val latestDue = duePendingEvents.last()
             workGateway.enqueuePrompt(
                 EmaScheduledPrompt(
-                    eventId = earliestDue.id,
-                    scheduledAt = earliestDue.scheduledAt,
+                    eventId = latestDue.id,
+                    scheduledAt = latestDue.scheduledAt,
                 ),
             )
-        } else {
-            pendingEvents.forEach { event ->
-                workGateway.enqueuePrompt(
-                    EmaScheduledPrompt(
-                        eventId = event.id,
-                        scheduledAt = event.scheduledAt,
-                    ),
-                )
-            }
+        }
+
+        futurePendingEvents.forEach { event ->
+            workGateway.enqueuePrompt(
+                EmaScheduledPrompt(
+                    eventId = event.id,
+                    scheduledAt = event.scheduledAt,
+                ),
+            )
         }
     }
 }

@@ -105,4 +105,39 @@ class EmaCheckInActivityTest {
             }
         }
     }
+
+    @Test
+    fun backPressDismissesPendingCheckIn() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = InMemoryEmaEventStore().apply {
+            save(
+                EmaEvent.pending(
+                    "back-event",
+                    Instant.parse("2026-09-15T09:00:00Z"),
+                    ZoneId.of("Europe/Moscow"),
+                ),
+            )
+        }
+        EmaCheckInActivity.eventStoreFactory = { store }
+        EmaCheckInActivity.configStoreFactory = {
+            object : EmaConfigStore {
+                override fun load() = EmaConfig(
+                    activityCategories = listOf(EmaActivityCategory("work_coding", "Work / coding")),
+                )
+                override fun save(config: EmaConfig) = Unit
+            }
+        }
+        val intent = Intent(context, EmaCheckInActivity::class.java)
+            .putExtra(WorkManagerEmaGateway.KEY_EVENT_ID, "back-event")
+
+        ActivityScenario.launch<EmaCheckInActivity>(intent).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.onBackPressedDispatcher.onBackPressed()
+                assertTrue(activity.isFinishing)
+            }
+        }
+
+        val event = store.get("back-event")
+        assertEquals(EmaResponseStatus.DISMISSED, event?.status)
+    }
 }
