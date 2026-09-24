@@ -90,9 +90,12 @@ class EmaScheduleRefreshWorker(
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
         val config = SharedPreferencesEmaConfigStore(applicationContext).load()
+        val store = emaEventStore(applicationContext)
+        val notifications = AndroidEmaNotificationGateway(applicationContext)
         EmaScheduleCoordinator(
-            emaEventStore(applicationContext),
-            WorkManagerEmaGateway(applicationContext),
+            store = store,
+            workGateway = WorkManagerEmaGateway(applicationContext),
+            promptHandler = EmaPromptHandler(store, notifications),
         ).reconcile(Instant.now(), ZoneId.systemDefault(), config)
         return Result.success()
     }

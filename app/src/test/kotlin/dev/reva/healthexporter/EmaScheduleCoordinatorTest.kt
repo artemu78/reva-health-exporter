@@ -69,13 +69,21 @@ class EmaScheduleCoordinatorTest {
             save(EmaEvent.pending("due-c", dueTime.plusSeconds(60), zone))
         }
         val gateway = RecordingEmaWorkGateway()
-        val coordinator = EmaScheduleCoordinator(store, gateway, EmaSchedulePlanner { 0.5 })
+        val notifications = CoordinatorRecordingEmaNotificationGateway()
+        val promptHandler = EmaPromptHandler(store, notifications)
+        val coordinator = EmaScheduleCoordinator(
+            store = store,
+            workGateway = gateway,
+            planner = EmaSchedulePlanner { 0.5 },
+            promptHandler = promptHandler,
+        )
 
         coordinator.reconcile(now, zone, config)
 
         assertEquals(EmaResponseStatus.EXPIRED, store.get("due-a")?.status)
         assertEquals(EmaResponseStatus.EXPIRED, store.get("due-b")?.status)
         assertEquals(EmaResponseStatus.PENDING, store.get("due-c")?.status)
+        assertEquals(listOf("due-a", "due-b"), notifications.cancelled)
         assertTrue(gateway.prompts.any { it.eventId == "due-c" })
     }
 
@@ -93,11 +101,42 @@ class EmaScheduleCoordinatorTest {
             )
         }
         val gateway = RecordingEmaWorkGateway()
-        val coordinator = EmaScheduleCoordinator(store, gateway, EmaSchedulePlanner { 0.5 })
+        val notifications = CoordinatorRecordingEmaNotificationGateway()
+        val promptHandler = EmaPromptHandler(store, notifications)
+        val coordinator = EmaScheduleCoordinator(
+            store = store,
+            workGateway = gateway,
+            planner = EmaSchedulePlanner { 0.5 },
+            promptHandler = promptHandler,
+        )
 
         coordinator.reconcile(now, zone, config)
 
         assertEquals(EmaResponseStatus.EXPIRED, store.get("yesterday-prompt")?.status)
+        assertEquals(listOf("yesterday-prompt"), notifications.cancelled)
+    }
+
+    @Test
+    fun preservesFutureOvernightPromptWhoseScheduleDateIsYesterday() {
+        val yesterday = now.atZone(zone).toLocalDate().minusDays(1)
+        val futureScheduledAt = now.plus(Duration.ofHours(2))
+        val store = InMemoryEmaEventStore().apply {
+            save(
+                EmaEvent.pending(
+                    id = "overnight-prompt",
+                    scheduledAt = futureScheduledAt,
+                    zoneId = zone,
+                    scheduleDate = yesterday,
+                ),
+            )
+        }
+        val gateway = RecordingEmaWorkGateway()
+        val coordinator = EmaScheduleCoordinator(store, gateway, EmaSchedulePlanner { 0.5 })
+
+        coordinator.reconcile(now, zone, config)
+
+        assertEquals(EmaResponseStatus.PENDING, store.get("overnight-prompt")?.status)
+        assertTrue(gateway.prompts.any { it.eventId == "overnight-prompt" })
     }
 
     @Test
@@ -189,5 +228,18 @@ private class RecordingEmaWorkGateway : EmaWorkGateway {
 
     override fun cancelAll() {
         cancelRequests++
+    }
+}
+
+private class CoordinatorRecordingEmaNotificationGateway : EmaNotificationGateway {
+    val shown = mutableListOf<String>()
+    val cancelled = mutableListOf<String>()
+
+    override fun show(eventId: String) {
+        shown += eventId
+    }
+
+    override fun cancel(eventId: String) {
+        cancelled += eventId
     }
 }

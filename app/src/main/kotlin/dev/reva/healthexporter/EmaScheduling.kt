@@ -25,12 +25,19 @@ class EmaScheduleCoordinator(
     private val workGateway: EmaWorkGateway,
     private val planner: EmaSchedulePlanner = EmaSchedulePlanner(),
     private val idGenerator: EmaIdGenerator = EmaIdGenerator { UUID.randomUUID().toString() },
+    private val promptHandler: EmaPromptHandler = EmaPromptHandler(
+        store,
+        object : EmaNotificationGateway {
+            override fun show(eventId: String) = Unit
+            override fun cancel(eventId: String) = Unit
+        },
+    ),
 ) {
     fun reconcile(now: Instant, zoneId: ZoneId, config: EmaConfig) {
         if (!config.notificationsEnabled) {
             workGateway.cancelAll()
             store.all().filter { it.status == EmaResponseStatus.PENDING }.forEach {
-                EmaCheckInService(store).expire(it.id)
+                promptHandler.expire(it.id)
             }
             return
         }
@@ -43,8 +50,7 @@ class EmaScheduleCoordinator(
 
     fun reconfigure(now: Instant, zoneId: ZoneId, config: EmaConfig) {
         workGateway.cancelAll()
-        val service = EmaCheckInService(store)
-        store.all().filter { it.status == EmaResponseStatus.PENDING }.forEach { service.expire(it.id) }
+        store.all().filter { it.status == EmaResponseStatus.PENDING }.forEach { promptHandler.expire(it.id) }
         if (!config.notificationsEnabled) return
         scheduleDays(now, zoneId, config, replace = true)
         enqueuePending(now)
@@ -53,11 +59,10 @@ class EmaScheduleCoordinator(
 
     private fun expireStalePrompts(now: Instant, zoneId: ZoneId) {
         val today = now.atZone(zoneId).toLocalDate()
-        val service = EmaCheckInService(store)
         val pendingEvents = store.all().filter { it.status == EmaResponseStatus.PENDING }
 
-        pendingEvents.filter { it.scheduleDate < today }.forEach {
-            service.expire(it.id)
+        pendingEvents.filter { it.scheduleDate < today && !it.scheduledAt.isAfter(now) }.forEach {
+            promptHandler.expire(it.id)
         }
 
         val duePending = store.all().filter {
@@ -66,7 +71,7 @@ class EmaScheduleCoordinator(
 
         if (duePending.size > 1) {
             duePending.dropLast(1).forEach {
-                service.expire(it.id)
+                promptHandler.expire(it.id)
             }
         }
     }
@@ -79,8 +84,7 @@ class EmaScheduleCoordinator(
             }
             if (pendingDifferentZone.isNotEmpty()) {
                 workGateway.cancelAll()
-                val service = EmaCheckInService(store)
-                pendingDifferentZone.forEach { service.expire(it.id) }
+                pendingDifferentZone.forEach { promptHandler.expire(it.id) }
             }
             val alreadyScheduled = store.all().any {
                 it.scheduleDate == date && it.timezone == zoneId.id

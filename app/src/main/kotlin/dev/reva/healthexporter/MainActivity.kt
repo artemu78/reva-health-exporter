@@ -332,16 +332,22 @@ class MainActivity : ComponentActivity() {
             activityCategories = configuredCategories,
         )
         emaConfigStore.save(config)
-        EmaScheduleCoordinator(emaStore, WorkManagerEmaGateway(this))
-            .reconfigure(Instant.now(), ZoneId.systemDefault(), config)
+        EmaScheduleCoordinator(
+            store = emaStore,
+            workGateway = WorkManagerEmaGateway(this),
+            promptHandler = EmaPromptHandler(emaStore, AndroidEmaNotificationGateway(this)),
+        ).reconfigure(Instant.now(), ZoneId.systemDefault(), config)
         requestEmaNotificationPermission(config)
         findViewById<TextView>(R.id.ema_settings_status).text = getString(R.string.ema_settings_saved)
     }
 
     private fun reconcileEmaSchedule() {
         val config = emaConfigStore.load()
-        EmaScheduleCoordinator(emaStore, WorkManagerEmaGateway(this))
-            .reconcile(Instant.now(), ZoneId.systemDefault(), config)
+        EmaScheduleCoordinator(
+            store = emaStore,
+            workGateway = WorkManagerEmaGateway(this),
+            promptHandler = EmaPromptHandler(emaStore, AndroidEmaNotificationGateway(this)),
+        ).reconcile(Instant.now(), ZoneId.systemDefault(), config)
         requestEmaNotificationPermission(config)
     }
 
