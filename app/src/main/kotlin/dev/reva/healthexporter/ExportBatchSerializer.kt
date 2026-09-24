@@ -94,8 +94,7 @@ open class ExportBatchSerializer {
     }
 
     private fun parseEnvelopeMetadata(root: JsonObject): Pair<String, Instant> {
-        val exportSchemaVersion = root.get("exportSchemaVersion")?.asInt
-            ?: throw InvalidExportSchemaException("Missing 'exportSchemaVersion'")
+        val exportSchemaVersion = root.requiredInt("exportSchemaVersion")
         if (exportSchemaVersion != 1) {
             throw InvalidExportSchemaException("Unsupported exportSchemaVersion: $exportSchemaVersion (expected 1)")
         }
@@ -123,7 +122,7 @@ open class ExportBatchSerializer {
             throw InvalidExportSchemaException("'healthConnectBatch' must be a JSON object")
         }
         val hcBatchObj = hcBatchElem.asJsonObject
-        val hcSchemaVersion = hcBatchObj.get("schemaVersion")?.asInt ?: 1
+        val hcSchemaVersion = hcBatchObj.requiredInt("schemaVersion")
         if (hcSchemaVersion != 1) {
             throw InvalidExportSchemaException("Unsupported healthConnectBatch schemaVersion: $hcSchemaVersion (expected 1)")
         }

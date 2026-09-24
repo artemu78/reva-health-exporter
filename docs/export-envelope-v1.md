@@ -34,14 +34,14 @@ Each export file (such as a Google Drive daily snapshot `YYYY-MM-DD.json`) confo
 {
   "exportSchemaVersion": 1,
   "exportId": "00000000-0000-4000-8000-000000000001",
-  "createdAt": "2026-09-24T06:00:00Z",
+  "createdAt": "2026-09-24T22:00:00Z",
   "healthConnectBatch": {
     "schemaVersion": 1,
     "header": {
       "schemaVersion": 1,
       "installationId": "00000000-0000-4000-8000-000000000001",
       "batchId": "00000000-0000-4000-8000-000000000001",
-      "createdAt": "2026-09-24T06:00:00Z",
+      "createdAt": "2026-09-24T22:00:00Z",
       "timeWindow": {
         "startInclusive": "2026-09-24T00:00:00Z",
         "endExclusive": "2026-09-25T00:00:00Z"

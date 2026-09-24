@@ -77,11 +77,13 @@ class ExportCoordinatorTest {
         maxBatchDuration: Duration? = Duration.ofDays(1),
         exportStateStore: ExportStateStore = stateStore,
         emaStore: EmaEventStore? = null,
+        zoneId: ZoneId = ZoneOffset.UTC,
     ): ExportCoordinator = ExportCoordinator(
         stateStore = exportStateStore,
         recordReader = reader,
         destination = destination,
         clock = clock,
+        zoneId = zoneId,
         idGenerator = idGen,
         config = ExportCoordinatorConfig(
             initialLookbackPeriod = initialLookback,
@@ -649,7 +651,7 @@ class ExportCoordinatorTest {
             activityLabel = "Exercise / stretching",
             note = "Morning workout",
             status = EmaResponseStatus.ANSWERED,
-            timezone = ZoneId.systemDefault().id,
+            timezone = "UTC",
         )
         emaStore.save(event)
 
@@ -677,7 +679,7 @@ class ExportCoordinatorTest {
             activityLabel = null,
             note = null,
             status = EmaResponseStatus.PENDING,
-            timezone = ZoneId.systemDefault().id,
+            timezone = "UTC",
         )
         emaStore.save(event)
 

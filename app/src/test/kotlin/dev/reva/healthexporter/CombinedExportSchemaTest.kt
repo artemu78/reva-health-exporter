@@ -153,6 +153,59 @@ class CombinedExportSchemaTest {
         assertEquals(5, backendStore["event-upsert-1"]?.answers?.mood)
     }
 
+    @Test
+    fun rejectsMissingOrInvalidExportSchemaVersion() {
+        val missingVersion = """
+            {
+              "exportId": "00000000-0000-4000-8000-000000000001",
+              "createdAt": "2026-09-24T22:00:00Z",
+              "healthConnectBatch": { "schemaVersion": 1, "records": [] }
+            }
+        """.trimIndent()
+        org.junit.Assert.assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseJson(missingVersion)
+        }
+
+        val nonIntVersion = """
+            {
+              "exportSchemaVersion": "one",
+              "exportId": "00000000-0000-4000-8000-000000000001",
+              "createdAt": "2026-09-24T22:00:00Z",
+              "healthConnectBatch": { "schemaVersion": 1, "records": [] }
+            }
+        """.trimIndent()
+        org.junit.Assert.assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseJson(nonIntVersion)
+        }
+    }
+
+    @Test
+    fun rejectsMissingOrInvalidHealthConnectBatchSchemaVersion() {
+        val missingHcVersion = """
+            {
+              "exportSchemaVersion": 1,
+              "exportId": "00000000-0000-4000-8000-000000000001",
+              "createdAt": "2026-09-24T22:00:00Z",
+              "healthConnectBatch": { "records": [] }
+            }
+        """.trimIndent()
+        org.junit.Assert.assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseJson(missingHcVersion)
+        }
+
+        val nonIntHcVersion = """
+            {
+              "exportSchemaVersion": 1,
+              "exportId": "00000000-0000-4000-8000-000000000001",
+              "createdAt": "2026-09-24T22:00:00Z",
+              "healthConnectBatch": { "schemaVersion": "1", "records": [] }
+            }
+        """.trimIndent()
+        org.junit.Assert.assertThrows(InvalidExportSchemaException::class.java) {
+            serializer.parseJson(nonIntHcVersion)
+        }
+    }
+
     private fun getFixtureStream(path: String): InputStream {
         val stream = javaClass.classLoader?.getResourceAsStream(path)
         assertNotNull("Fixture not found on classpath: $path", stream)

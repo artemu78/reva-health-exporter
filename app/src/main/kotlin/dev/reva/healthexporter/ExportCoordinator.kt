@@ -147,7 +147,11 @@ class ExportCoordinator(
             )
         }
 
-        val startInclusive = lastCheckpoint?.lastWindowEnd ?: now.minus(config.initialLookbackPeriod)
+        val startInclusive = if (lastCheckpoint != null) {
+            lastCheckpoint.lastWindowEnd
+        } else {
+            now.minus(config.initialLookbackPeriod)
+        }
         val maxDuration = config.maxBatchDuration
         val endExclusive = if (maxDuration != null) {
             val clamped = startInclusive.plus(maxDuration)
