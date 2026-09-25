@@ -228,7 +228,8 @@ class ExportCoordinator(
                 }
             }
             emaEventStore.all().filter { event ->
-                !event.scheduleDate.isBefore(windowStartDate) && event.scheduleDate.isBefore(windowEndDate)
+                event.status == EmaResponseStatus.ANSWERED &&
+                    !event.scheduleDate.isBefore(windowStartDate) && event.scheduleDate.isBefore(windowEndDate)
             }
         } else {
             emptyList()

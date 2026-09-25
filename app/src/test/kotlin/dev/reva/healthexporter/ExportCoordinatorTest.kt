@@ -666,6 +666,38 @@ class ExportCoordinatorTest {
     }
 
     @Test
+    fun exportsOnlyAnsweredEmaEvents() = runBlocking {
+        val emaStore = InMemoryEmaEventStore()
+        val scheduledAt = Instant.parse("2026-08-29T08:00:00Z")
+        val scheduleDate = java.time.LocalDate.parse("2026-08-29")
+        fun event(id: String, status: EmaResponseStatus) = EmaEvent(
+            schemaVersion = 1,
+            id = id,
+            scheduleDate = scheduleDate,
+            scheduledAt = scheduledAt,
+            answeredAt = if (status == EmaResponseStatus.ANSWERED) scheduledAt.plusSeconds(60) else null,
+            answers = if (status == EmaResponseStatus.ANSWERED) EmaAnswers(mood = 4, energy = 3, focus = 4, stress = 2) else null,
+            activity = null,
+            activityLabel = null,
+            note = null,
+            status = status,
+            timezone = "UTC",
+        )
+        listOf(
+            event("answered", EmaResponseStatus.ANSWERED),
+            event("pending", EmaResponseStatus.PENDING),
+            event("dismissed", EmaResponseStatus.DISMISSED),
+            event("expired", EmaResponseStatus.EXPIRED),
+        ).forEach(emaStore::save)
+
+        val coordinator = createCoordinator(emaStore = emaStore)
+        val result = coordinator.export()
+
+        assertTrue(result is ExportCycleResult.Success)
+        assertEquals(listOf("answered"), destination.uploadedBatches.single().emaEvents.map { it.id })
+    }
+
+    @Test
     fun retainsEmaEventsInPendingBatchWhenUploadFailsAndReExportsOnRetry() = runBlocking {
         val emaStore = InMemoryEmaEventStore()
         val event = EmaEvent(
@@ -673,12 +705,12 @@ class ExportCoordinatorTest {
             id = "ema-retry-01",
             scheduleDate = java.time.LocalDate.parse("2026-08-29"),
             scheduledAt = Instant.parse("2026-08-29T08:00:00Z"),
-            answeredAt = null,
-            answers = null,
+            answeredAt = Instant.parse("2026-08-29T08:02:00Z"),
+            answers = EmaAnswers(mood = 4, energy = 3, focus = 4, stress = 2),
             activity = null,
             activityLabel = null,
             note = null,
-            status = EmaResponseStatus.PENDING,
+            status = EmaResponseStatus.ANSWERED,
             timezone = "UTC",
         )
         emaStore.save(event)
