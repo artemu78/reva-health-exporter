@@ -9,6 +9,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.style.RelativeSizeSpan
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
@@ -106,6 +108,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        enlargeFooterNavigationIcons()
         matrixWindowsBack = savedInstanceState?.getInt("matrix_window", 0) ?: 0
         val initialPage = savedInstanceState?.getInt("matrix_page", R.id.matrix_records) ?: R.id.matrix_records
         val initialHistory = savedInstanceState?.getIntegerArrayList("matrix_page_history").orEmpty()
@@ -254,6 +257,24 @@ class MainActivity : ComponentActivity() {
         findViewById<View>(R.id.matrix_clear).setOnClickListener {
             exportHistoryPresenter.state.rows.filter { it.selected }.forEach { exportHistoryPresenter.toggle(it.date) }
             renderExportHistory()
+        }
+    }
+
+    private fun enlargeFooterNavigationIcons() {
+        listOf(
+            R.id.matrix_nav_records,
+            R.id.matrix_nav_vaults,
+            R.id.matrix_nav_audit,
+            R.id.matrix_nav_settings,
+        ).forEach { id ->
+            val button = findViewById<Button>(id)
+            val label = button.text
+            val iconEnd = label.indexOf('\n')
+            if (iconEnd > 0) {
+                button.text = SpannableString(label).apply {
+                    setSpan(RelativeSizeSpan(2f), 0, iconEnd, 0)
+                }
+            }
         }
     }
 
