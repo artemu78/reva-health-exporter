@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        enlargeFooterNavigationIcons()
+        applyFooterNavigationIconSize()
         matrixWindowsBack = savedInstanceState?.getInt("matrix_window", 0) ?: 0
         val initialPage = savedInstanceState?.getInt("matrix_page", R.id.matrix_records) ?: R.id.matrix_records
         val initialHistory = savedInstanceState?.getIntegerArrayList("matrix_page_history").orEmpty()
@@ -260,7 +260,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun enlargeFooterNavigationIcons() {
+    private fun applyFooterNavigationIconSize() {
+        val iconSize = resources.getDimension(R.dimen.main_screen_icon_size)
         listOf(
             R.id.matrix_nav_records,
             R.id.matrix_nav_vaults,
@@ -272,7 +273,7 @@ class MainActivity : ComponentActivity() {
             val iconEnd = label.indexOf('\n')
             if (iconEnd > 0) {
                 button.text = SpannableString(label).apply {
-                    setSpan(RelativeSizeSpan(2f), 0, iconEnd, 0)
+                    setSpan(RelativeSizeSpan(iconSize / button.textSize), 0, iconEnd, 0)
                 }
             }
         }
