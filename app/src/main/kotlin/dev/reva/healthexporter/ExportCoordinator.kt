@@ -69,18 +69,7 @@ class ExportCoordinator(
             return@withLock pendingBatchFailure
         }
         if (pendingBatch != null) {
-            val batch = try {
-                reconcilePendingEmaEvents(pendingBatch)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (e: Exception) {
-                return@withLock ExportCycleResult.RetryableFailure(
-                    batch = pendingBatch,
-                    message = "Failed to reconcile pending EMA events: ${e.message}",
-                    cause = e,
-                )
-            }
-            return@withLock uploadAndConfirm(batch = batch, isRetry = true)
+            return@withLock retryPendingBatch(pendingBatch)
         }
 
         val now = clock.now(zoneId).toInstant()
@@ -97,6 +86,21 @@ class ExportCoordinator(
 
         val batch = buildExportBatch(now, safeWindow, checkNotNull(rawRecords))
         return@withLock persistAndUpload(batch)
+    }
+
+    private suspend fun retryPendingBatch(pendingBatch: ExportBatch): ExportCycleResult {
+        val batch = try {
+            reconcilePendingEmaEvents(pendingBatch)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (e: Exception) {
+            return ExportCycleResult.RetryableFailure(
+                batch = pendingBatch,
+                message = "Failed to reconcile pending EMA events: ${e.message}",
+                cause = e,
+            )
+        }
+        return uploadAndConfirm(batch = batch, isRetry = true)
     }
 
     private suspend fun verifyDestination(): ExportCycleResult? {
