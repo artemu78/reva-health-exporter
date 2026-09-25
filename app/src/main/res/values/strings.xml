@@ -108,4 +108,15 @@
         <item quantity="one">%d day selected</item>
         <item quantity="other">%d days selected</item>
     </plurals>
+    <string name="details_title">Day details</string>
+    <string name="details_back">Back to calendar</string>
+    <string name="details_button">Details</string>
+    <string name="details_retry">Refresh</string>
+    <string name="details_date">Selected date</string>
+    <string name="details_type">Data type and record count</string>
+    <string name="details_loading">Loading records…</string>
+    <string name="details_failed">Could not load records. Tap Refresh to retry.</string>
+    <string name="details_empty">No accessible records for this date. Health Connect permissions and history limits can restrict results.</string>
+    <string name="details_raw_totals">Totals include all sources; overlapping records may count twice. Export policy is shown per record.</string>
+    <string name="details_scope">%1$s · Health records grouped by start date, matching uploads. EMA grouped by schedule date. Health Connect history limits apply.</string>
 </resources>
