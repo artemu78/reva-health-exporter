@@ -171,6 +171,11 @@ class MainActivity : ComponentActivity() {
         }
         findViewById<Button>(R.id.export_history_refresh).setOnClickListener { refreshExportHistory() }
         findViewById<Button>(R.id.export_history_upload_selected).setOnClickListener { confirmBackfill() }
+        findViewById<Button>(R.id.matrix_details).setOnClickListener {
+            val dates = exportHistoryPresenter.state.rows.filter { it.selected }.map { it.date.toString() }
+            if (dates.isNotEmpty()) startActivity(Intent(this, DayDetailsActivity::class.java)
+                .putStringArrayListExtra(DayDetailsActivity.DATES, ArrayList(dates)))
+        }
         showInitialExportHistory(inventoryKnown = false)
         renderDriveAuthorization(driveAuthorizationCoordinator.state)
         findViewById<Button>(R.id.diagnostic_export).setOnClickListener {

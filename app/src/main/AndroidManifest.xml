@@ -28,6 +28,7 @@
         <receiver
             android:name=".EmaDismissReceiver"
             android:exported="false" />
+        <activity android:name=".DayDetailsActivity" android:exported="false" />
         <activity
             android:name=".EmaCheckInActivity"
             android:exported="false" />

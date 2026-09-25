@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/details_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="#F5FAFA" android:padding="16dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+        <Button android:id="@+id/details_back" android:layout_width="48dp" android:layout_height="48dp" android:text="‹" android:textSize="28sp" android:contentDescription="@string/details_back" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/details_title" android:textSize="24sp" android:textColor="#005152" android:paddingHorizontal="8dp" />
+        <Button android:id="@+id/details_retry" android:layout_width="wrap_content" android:layout_height="48dp" android:text="@string/details_retry" android:textAllCaps="false" />
+    </LinearLayout>
+    <TextView android:id="@+id/details_scope" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" android:textColor="#405858" />
+    <Spinner android:id="@+id/details_dates" android:layout_width="match_parent" android:layout_height="48dp" android:contentDescription="@string/details_date" android:spinnerMode="dropdown" />
+    <Spinner android:id="@+id/details_types" android:layout_width="match_parent" android:layout_height="48dp" android:contentDescription="@string/details_type" android:spinnerMode="dropdown" />
+    <TextView android:id="@+id/details_summary" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingVertical="8dp" android:textSize="16sp" android:textStyle="bold" android:textColor="#005152" android:accessibilityLiveRegion="polite" />
+    <TextView android:id="@+id/details_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="14sp" android:textColor="#405858" android:accessibilityLiveRegion="polite" />
+    <ListView android:id="@+id/details_records" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:divider="#CCE8E7" android:dividerHeight="8dp" android:clipToPadding="false" android:paddingVertical="8dp" />
+</LinearLayout>
