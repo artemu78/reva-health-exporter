@@ -233,6 +233,17 @@ class ExportHistoryTest {
             timezone = moscow.id,
         )
         emaStore.save(emaEvent)
+        listOf(
+            EmaResponseStatus.PENDING,
+            EmaResponseStatus.DISMISSED,
+            EmaResponseStatus.EXPIRED,
+        ).forEach { status ->
+            emaStore.save(EmaEvent.pending(
+                id = "backfill-${status.name.lowercase()}",
+                scheduledAt = Instant.parse("2026-09-04T08:00:00Z"),
+                zoneId = moscow,
+            ).copy(status = status))
+        }
 
         val coordinator = ManualBackfillCoordinator(
             exportStateStore = InMemoryExportStateStore("installation-test"),
@@ -249,6 +260,46 @@ class ExportHistoryTest {
         val batch = destination.uploadedBatches.single()
         assertEquals(1, batch.emaEvents.size)
         assertEquals("backfill-ema-1", batch.emaEvents.single().id)
+    }
+
+    @Test
+    fun manualBackfillRetryRemovesUnansweredEventsFromSavedBatch() = runBlocking {
+        val date = LocalDate.parse("2026-09-04")
+        val window = localDayWindow(date, moscow)
+        val batchId = stableBackfillBatchId("destination-a", window)
+        val pendingStore = InMemoryManualBackfillPendingStore()
+        val pendingEvent = EmaEvent.pending(
+            id = "legacy-pending",
+            scheduledAt = Instant.parse("2026-09-04T08:00:00Z"),
+            zoneId = moscow,
+        )
+        pendingStore.save("destination-a", ExportBatch(
+            header = BatchHeader(
+                installationId = "installation-test",
+                batchId = batchId,
+                createdAt = Instant.parse("2026-09-05T00:00:00Z"),
+                timeWindow = window,
+                recordCount = 0,
+                recordTypes = emptyList(),
+            ),
+            records = emptyList(),
+            emaEvents = listOf(pendingEvent),
+        ))
+        val emaStore = InMemoryEmaEventStore().apply { save(pendingEvent) }
+        val destination = RecordingDestination()
+        val backfill = ManualBackfillCoordinator(
+            exportStateStore = InMemoryExportStateStore("installation-test"),
+            historyStore = InMemoryExportHistoryStore(),
+            recordReader = RecordingReader(emptyList()),
+            destination = destination,
+            destinationKey = "destination-a",
+            pendingStore = pendingStore,
+            emaEventStore = emaStore,
+        )
+
+        assertTrue(backfill.uploadDays(listOf(date), moscow) is ManualBackfillResult.Success)
+        assertEquals(batchId, destination.uploadedBatches.single().header.batchId)
+        assertTrue(destination.uploadedBatches.single().emaEvents.isEmpty())
     }
 
     @Test

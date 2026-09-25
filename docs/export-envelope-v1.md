@@ -69,7 +69,7 @@ Each export file (such as a Google Drive daily snapshot `YYYY-MM-DD.json`) confo
 | `exportId` | String | Yes | Unique batch identifier (stable UUID or daily snapshot identity). |
 | `createdAt` | String | Yes | ISO-8601 UTC timestamp (`YYYY-MM-DDTHH:MM:SSZ`) when the export was generated. |
 | `healthConnectBatch` | Object | Yes | Health Connect payload containing `schemaVersion`, optional `header`, and `records`. |
-| `emaEvents` | Array | Yes | List of EMA event objects collected for the export window. |
+| `emaEvents` | Array | Yes | Answered EMA events confirmed by this export. Their scheduled dates may precede the Health Connect time window if they were answered after an earlier export. |
 
 ---
 
@@ -107,7 +107,8 @@ Every EMA event possesses a stable identifier (`id`, e.g. `018f-example-event-00
 
 **Backend Ingestion Invariant:**
 - Ingestion must use `id` as the primary upsert key.
-- Subsequent exports of the same local day (e.g. during snapshot refreshes or retries) may contain updated revisions of an event (for instance, transitioning from `pending` to `answered`).
+- Automatic exports include answered events not yet confirmed by a successful upload, even when their scheduled day is before the Health Connect window. Manual backfills include answered events for the selected day.
+- Retried batches retain their batch identity, but refresh saved EMA entries from the local event store before upload so older pending or terminal states cannot be sent after an upgrade.
 - A newer copy of an event with the same `id` **replaces** the previous event state. It must never create duplicate records or observations.
 
 ### Lifecycle Statuses and Field Constraints

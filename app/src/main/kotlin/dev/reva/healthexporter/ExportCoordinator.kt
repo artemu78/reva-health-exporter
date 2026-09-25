@@ -69,7 +69,18 @@ class ExportCoordinator(
             return@withLock pendingBatchFailure
         }
         if (pendingBatch != null) {
-            return@withLock uploadAndConfirm(batch = pendingBatch, isRetry = true)
+            val batch = try {
+                reconcilePendingEmaEvents(pendingBatch)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (e: Exception) {
+                return@withLock ExportCycleResult.RetryableFailure(
+                    batch = pendingBatch,
+                    message = "Failed to reconcile pending EMA events: ${e.message}",
+                    cause = e,
+                )
+            }
+            return@withLock uploadAndConfirm(batch = batch, isRetry = true)
         }
 
         val now = clock.now(zoneId).toInstant()
@@ -219,17 +230,10 @@ class ExportCoordinator(
         )
 
         val emaEvents = if (emaEventStore != null) {
-            val windowStartDate = timeWindow.startInclusive.atZone(zoneId).toLocalDate()
-            val windowEndDate = timeWindow.endExclusive.atZone(zoneId).let { zdt ->
-                if (zdt.toLocalTime() == java.time.LocalTime.MIDNIGHT) {
-                    zdt.toLocalDate()
-                } else {
-                    zdt.toLocalDate().plusDays(1)
-                }
-            }
+            val exportedIds = stateStore.getExportedEmaEventIds()
             emaEventStore.all().filter { event ->
                 event.status == EmaResponseStatus.ANSWERED &&
-                    !event.scheduleDate.isBefore(windowStartDate) && event.scheduleDate.isBefore(windowEndDate)
+                    event.id !in exportedIds
             }
         } else {
             emptyList()
@@ -258,6 +262,16 @@ class ExportCoordinator(
         return uploadAndConfirm(batch = batch, isRetry = false)
     }
 
+    private fun reconcilePendingEmaEvents(batch: ExportBatch): ExportBatch {
+        val currentEvents = emaEventStore?.all()?.associateBy(EmaEvent::id)
+        val answered = batch.emaEvents.mapNotNull { saved ->
+            val current = if (currentEvents == null) saved else currentEvents[saved.id]
+            current?.takeIf { it.status == EmaResponseStatus.ANSWERED }
+        }
+        if (answered == batch.emaEvents) return batch
+        return batch.copy(emaEvents = answered).also(stateStore::savePendingBatch)
+    }
+
     private suspend fun uploadAndConfirm(batch: ExportBatch, isRetry: Boolean): ExportCycleResult {
         val uploadResult = try {
             destination.upload(batch)
@@ -283,6 +297,9 @@ class ExportCoordinator(
                 )
 
                 try {
+                    stateStore.saveExportedEmaEventIds(
+                        stateStore.getExportedEmaEventIds() + batch.emaEvents.map(EmaEvent::id),
+                    )
                     stateStore.saveCheckpoint(newCheckpoint)
                     stateStore.clearPendingBatch()
                 } catch (cancellation: CancellationException) {
@@ -290,7 +307,7 @@ class ExportCoordinator(
                 } catch (e: Exception) {
                     return ExportCycleResult.RetryableFailure(
                         batch = batch,
-                        message = "Upload succeeded but failed to save checkpoint or clear pending batch: ${e.message}",
+                        message = "Upload succeeded but failed to save export progress or clear pending batch: ${e.message}",
                         cause = e,
                     )
                 }
