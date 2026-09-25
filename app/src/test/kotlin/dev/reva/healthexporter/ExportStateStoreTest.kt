@@ -141,11 +141,13 @@ class ExportStateStoreTest {
 
         val checkpoint = createSampleCheckpoint("batch-persist-01")
         store1.saveCheckpoint(checkpoint)
+        store1.saveExportedEmaEventIds(setOf("ema-confirmed-1"))
 
         // Instantiate second store instance sharing the same preferences
         val store2 = SharedPreferencesExportStateStore(preferences = sharedPrefs)
         assertEquals(instId, store2.getInstallationId())
         assertEquals(checkpoint, store2.getLastCheckpoint())
+        assertEquals(setOf("ema-confirmed-1"), store2.getExportedEmaEventIds())
         val loadedBatch = store2.getPendingBatch()
         assertNotNull(loadedBatch)
         assertEquals(batch.header.batchId, loadedBatch!!.header.batchId)
@@ -239,4 +241,3 @@ class ExportStateStoreTest {
         assertNull(store2.getLastExecutionSummary())
     }
 }
-

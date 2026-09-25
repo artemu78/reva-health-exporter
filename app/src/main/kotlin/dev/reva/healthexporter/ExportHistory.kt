@@ -258,7 +258,9 @@ class SharedPreferencesManualBackfillPendingStore(
         preferences.getString(key(destinationKey, batchId), null)?.let(serializer::parseJson)
     } catch (_: Exception) { null }
     override fun save(destinationKey: String, batch: ExportBatch) {
-        preferences.edit().putString(key(destinationKey, batch.header.batchId), serializer.serializeToJson(batch)).commit()
+        check(preferences.edit()
+            .putString(key(destinationKey, batch.header.batchId), serializer.serializeToJson(batch))
+            .commit()) { "Failed to save pending manual backfill batch" }
     }
     override fun remove(destinationKey: String, batchId: String) {
         preferences.edit().remove(key(destinationKey, batchId)).commit()
@@ -324,7 +326,17 @@ class ManualBackfillCoordinator(
     private suspend fun uploadWindow(window: TimeWindow, zoneId: ZoneId): WindowUploadResult {
         val batchId = stableBackfillBatchId(destinationKey, window)
         val now = clock.now(zoneId).toInstant()
-        val batch = when (val preparation = prepareBatch(batchId, window, now, zoneId)) {
+        val preparation = try {
+            prepareBatch(batchId, window, now, zoneId)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (e: Exception) {
+            return WindowUploadResult.Stopped(ManualBackfillResult.Retrying(
+                batchId,
+                "Failed to prepare manual backfill batch: ${e.message ?: "storage error"}",
+            ))
+        }
+        val batch = when (preparation) {
             is BatchPreparation.Ready -> preparation.batch
             BatchPreparation.Empty -> return WindowUploadResult.Empty
             is BatchPreparation.Stopped -> return WindowUploadResult.Stopped(preparation.result)
@@ -335,7 +347,17 @@ class ManualBackfillCoordinator(
     }
 
     private suspend fun prepareBatch(batchId: String, window: TimeWindow, now: Instant, zoneId: ZoneId): BatchPreparation {
-        pendingStore.get(destinationKey, batchId)?.let { return BatchPreparation.Ready(it) }
+        pendingStore.get(destinationKey, batchId)?.let { saved ->
+            val currentEvents = emaEventStore?.all()?.associateBy(EmaEvent::id)
+            val answered = saved.emaEvents.mapNotNull { event ->
+                val current = if (currentEvents == null) event else currentEvents[event.id]
+                current?.takeIf { it.status == EmaResponseStatus.ANSWERED }
+            }
+            val batch = if (answered == saved.emaEvents) saved else saved.copy(emaEvents = answered).also {
+                pendingStore.save(destinationKey, it)
+            }
+            return BatchPreparation.Ready(batch)
+        }
         val records = when (val read = readRecords(window)) {
             is RecordReadResult.Success -> read.records
             is RecordReadResult.Failure -> return BatchPreparation.Stopped(
@@ -352,7 +374,8 @@ class ManualBackfillCoordinator(
                 }
             }
             emaEventStore.all().filter { event ->
-                !event.scheduleDate.isBefore(windowStartDate) && event.scheduleDate.isBefore(windowEndDate)
+                event.status == EmaResponseStatus.ANSWERED &&
+                    !event.scheduleDate.isBefore(windowStartDate) && event.scheduleDate.isBefore(windowEndDate)
             }
         } else {
             emptyList()

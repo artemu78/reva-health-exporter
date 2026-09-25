@@ -666,6 +666,144 @@ class ExportCoordinatorTest {
     }
 
     @Test
+    fun exportsOnlyAnsweredEmaEvents() = runBlocking {
+        val emaStore = InMemoryEmaEventStore()
+        val scheduledAt = Instant.parse("2026-08-29T08:00:00Z")
+        val scheduleDate = java.time.LocalDate.parse("2026-08-29")
+        fun event(id: String, status: EmaResponseStatus) = EmaEvent(
+            schemaVersion = 1,
+            id = id,
+            scheduleDate = scheduleDate,
+            scheduledAt = scheduledAt,
+            answeredAt = if (status == EmaResponseStatus.ANSWERED) scheduledAt.plusSeconds(60) else null,
+            answers = if (status == EmaResponseStatus.ANSWERED) EmaAnswers(mood = 4, energy = 3, focus = 4, stress = 2) else null,
+            activity = null,
+            activityLabel = null,
+            note = null,
+            status = status,
+            timezone = "UTC",
+        )
+        listOf(
+            event("answered", EmaResponseStatus.ANSWERED),
+            event("pending", EmaResponseStatus.PENDING),
+            event("dismissed", EmaResponseStatus.DISMISSED),
+            event("expired", EmaResponseStatus.EXPIRED),
+        ).forEach(emaStore::save)
+
+        val coordinator = createCoordinator(emaStore = emaStore)
+        val result = coordinator.export()
+
+        assertTrue(result is ExportCycleResult.Success)
+        assertEquals(listOf("answered"), destination.uploadedBatches.single().emaEvents.map { it.id })
+    }
+
+    @Test
+    fun exportsCheckInAnsweredAfterItsScheduledDayWasCheckpointed() = runBlocking {
+        val emaStore = InMemoryEmaEventStore()
+        val event = EmaEvent.pending(
+            id = "late-answer",
+            scheduledAt = Instant.parse("2026-08-29T23:30:00Z"),
+            zoneId = ZoneOffset.UTC,
+        )
+        emaStore.save(event)
+        clock.currentInstant = Instant.parse("2026-08-30T00:00:00Z")
+        val coordinator = createCoordinator(emaStore = emaStore)
+
+        assertTrue(coordinator.export() is ExportCycleResult.Success)
+        assertTrue(destination.uploadedBatches.single().emaEvents.isEmpty())
+        assertTrue(EmaCheckInService(emaStore).answer(
+            event.id,
+            Instant.parse("2026-08-30T00:05:00Z"),
+            EmaAnswers(mood = 4, energy = 3, focus = 4, stress = 2),
+            "walking",
+            null,
+        ))
+        clock.currentInstant = Instant.parse("2026-08-30T00:10:00Z")
+
+        assertTrue(coordinator.export() is ExportCycleResult.Success)
+        assertEquals(listOf("late-answer"), destination.uploadedBatches.last().emaEvents.map { it.id })
+
+        clock.currentInstant = Instant.parse("2026-08-30T00:20:00Z")
+        assertTrue(coordinator.export() is ExportCycleResult.Success)
+        assertTrue(destination.uploadedBatches.last().emaEvents.isEmpty())
+    }
+
+    @Test
+    fun retryReconcilesPreUpgradeEmaBatchWithCurrentAnsweredEvents() = runBlocking {
+        val emaStore = InMemoryEmaEventStore()
+        val scheduledAt = Instant.parse("2026-08-29T23:30:00Z")
+        val pending = EmaEvent.pending("answered-later", scheduledAt, ZoneOffset.UTC)
+        val dismissed = EmaEvent.pending("dismissed", scheduledAt, ZoneOffset.UTC)
+            .copy(status = EmaResponseStatus.DISMISSED)
+        val expired = EmaEvent.pending("expired", scheduledAt, ZoneOffset.UTC)
+            .copy(status = EmaResponseStatus.EXPIRED)
+        listOf(pending, dismissed, expired).forEach(emaStore::save)
+        val oldBatch = ExportBatch(
+            header = BatchHeader(
+                installationId = "inst-test-01",
+                batchId = "pre-upgrade",
+                createdAt = Instant.parse("2026-08-30T00:00:00Z"),
+                timeWindow = TimeWindow(
+                    Instant.parse("2026-08-29T00:00:00Z"),
+                    Instant.parse("2026-08-30T00:00:00Z"),
+                ),
+                recordCount = 0,
+                recordTypes = emptyList(),
+            ),
+            records = emptyList(),
+            emaEvents = listOf(pending, dismissed, expired),
+        )
+        stateStore.savePendingBatch(oldBatch)
+        assertTrue(EmaCheckInService(emaStore).answer(
+            pending.id,
+            Instant.parse("2026-08-30T00:05:00Z"),
+            EmaAnswers(mood = 4, energy = 3, focus = 4, stress = 2),
+            "walking",
+            null,
+        ))
+
+        val result = createCoordinator(emaStore = emaStore).export()
+
+        assertTrue(result is ExportCycleResult.Success)
+        val uploaded = destination.uploadedBatches.single()
+        assertEquals("pre-upgrade", uploaded.header.batchId)
+        assertEquals(listOf("answered-later"), uploaded.emaEvents.map { it.id })
+        assertEquals(EmaResponseStatus.ANSWERED, uploaded.emaEvents.single().status)
+    }
+
+    @Test
+    fun answerWhileBatchIsPendingIsExportedAfterRetry() = runBlocking {
+        val emaStore = InMemoryEmaEventStore()
+        val event = EmaEvent.pending(
+            id = "answered-during-retry",
+            scheduledAt = Instant.parse("2026-08-29T23:30:00Z"),
+            zoneId = ZoneOffset.UTC,
+        )
+        emaStore.save(event)
+        clock.currentInstant = Instant.parse("2026-08-30T00:00:00Z")
+        destination.uploadResult = UploadResult.Failure("offline", isRetryable = true)
+        val coordinator = createCoordinator(emaStore = emaStore)
+
+        assertTrue(coordinator.export() is ExportCycleResult.RetryableFailure)
+        assertTrue(stateStore.getPendingBatch()!!.emaEvents.isEmpty())
+        assertTrue(EmaCheckInService(emaStore).answer(
+            event.id,
+            Instant.parse("2026-08-30T00:05:00Z"),
+            EmaAnswers(mood = 4, energy = 3, focus = 4, stress = 2),
+            "walking",
+            null,
+        ))
+        destination.uploadResult = null
+        clock.currentInstant = Instant.parse("2026-08-30T00:10:00Z")
+
+        assertTrue(coordinator.export() is ExportCycleResult.Success)
+        assertTrue(destination.uploadedBatches.single().emaEvents.isEmpty())
+        clock.currentInstant = Instant.parse("2026-08-30T00:20:00Z")
+        assertTrue(coordinator.export() is ExportCycleResult.Success)
+        assertEquals(listOf(event.id), destination.uploadedBatches.last().emaEvents.map { it.id })
+    }
+
+    @Test
     fun retainsEmaEventsInPendingBatchWhenUploadFailsAndReExportsOnRetry() = runBlocking {
         val emaStore = InMemoryEmaEventStore()
         val event = EmaEvent(
@@ -673,12 +811,12 @@ class ExportCoordinatorTest {
             id = "ema-retry-01",
             scheduleDate = java.time.LocalDate.parse("2026-08-29"),
             scheduledAt = Instant.parse("2026-08-29T08:00:00Z"),
-            answeredAt = null,
-            answers = null,
+            answeredAt = Instant.parse("2026-08-29T08:02:00Z"),
+            answers = EmaAnswers(mood = 4, energy = 3, focus = 4, stress = 2),
             activity = null,
             activityLabel = null,
             note = null,
-            status = EmaResponseStatus.PENDING,
+            status = EmaResponseStatus.ANSWERED,
             timezone = "UTC",
         )
         emaStore.save(event)

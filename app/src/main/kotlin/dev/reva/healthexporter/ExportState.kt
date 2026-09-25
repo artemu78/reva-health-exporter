@@ -121,6 +121,8 @@ interface ExportStateStore {
     fun getPendingBatch(): ExportBatch?
     fun savePendingBatch(batch: ExportBatch)
     fun clearPendingBatch()
+    fun getExportedEmaEventIds(): Set<String>
+    fun saveExportedEmaEventIds(ids: Set<String>)
     fun getLastExecutionSummary(): ExportExecutionSummary?
     fun saveExecutionSummary(summary: ExportExecutionSummary)
     fun clear()
@@ -132,6 +134,7 @@ class InMemoryExportStateStore(
     private val persistentInstallationId: String = installationId ?: UUID.randomUUID().toString()
     private var checkpoint: ExportCheckpoint? = null
     private var pendingBatch: ExportBatch? = null
+    private var exportedEmaEventIds: Set<String> = emptySet()
     private var executionSummary: ExportExecutionSummary? = null
 
     var failOnSavePendingBatch: Throwable? = null
@@ -164,6 +167,12 @@ class InMemoryExportStateStore(
         this.pendingBatch = null
     }
 
+    override fun getExportedEmaEventIds(): Set<String> = exportedEmaEventIds
+
+    override fun saveExportedEmaEventIds(ids: Set<String>) {
+        exportedEmaEventIds = ids.toSet()
+    }
+
     override fun getLastExecutionSummary(): ExportExecutionSummary? = executionSummary
 
     override fun saveExecutionSummary(summary: ExportExecutionSummary) {
@@ -174,6 +183,7 @@ class InMemoryExportStateStore(
     override fun clear() {
         checkpoint = null
         pendingBatch = null
+        exportedEmaEventIds = emptySet()
         executionSummary = null
     }
 }
@@ -241,10 +251,10 @@ class SharedPreferencesExportStateStore(
 
     override fun savePendingBatch(batch: ExportBatch) {
         val json = serializer.serializeToJson(batch)
-        preferences.edit()
+        check(preferences.edit()
             .putString(KEY_PENDING_BATCH_JSON, json)
             .remove(KEY_PENDING_BATCH_NDJSON)
-            .commit()
+            .commit()) { "Failed to save pending export batch" }
     }
 
     override fun clearPendingBatch() {
@@ -252,6 +262,15 @@ class SharedPreferencesExportStateStore(
             .remove(KEY_PENDING_BATCH_JSON)
             .remove(KEY_PENDING_BATCH_NDJSON)
             .commit()
+    }
+
+    override fun getExportedEmaEventIds(): Set<String> =
+        preferences.getStringSet(KEY_EXPORTED_EMA_EVENT_IDS, null)?.toSet() ?: emptySet()
+
+    override fun saveExportedEmaEventIds(ids: Set<String>) {
+        check(preferences.edit().putStringSet(KEY_EXPORTED_EMA_EVENT_IDS, ids.toSet()).commit()) {
+            "Failed to save exported EMA event IDs"
+        }
     }
 
     override fun getLastExecutionSummary(): ExportExecutionSummary? {
@@ -279,6 +298,7 @@ class SharedPreferencesExportStateStore(
             .remove(KEY_PENDING_BATCH_JSON)
             .remove(KEY_PENDING_BATCH_NDJSON)
             .remove(KEY_LAST_EXECUTION_SUMMARY_JSON)
+            .remove(KEY_EXPORTED_EMA_EVENT_IDS)
             .commit()
     }
 
@@ -289,9 +309,9 @@ class SharedPreferencesExportStateStore(
         const val KEY_PENDING_BATCH_JSON = "pending_export_batch_json"
         const val KEY_PENDING_BATCH_NDJSON = "pending_export_batch_ndjson"
         const val KEY_LAST_EXECUTION_SUMMARY_JSON = "last_export_execution_summary_json"
+        const val KEY_EXPORTED_EMA_EVENT_IDS = "exported_ema_event_ids"
         const val KEY_CORRUPT_CHECKPOINT_BACKUP = "corrupt_last_checkpoint_backup"
         const val KEY_CORRUPT_PENDING_BATCH_BACKUP = "corrupt_pending_batch_backup"
         const val KEY_CORRUPT_SUMMARY_BACKUP = "corrupt_last_execution_summary_backup"
     }
 }
-
