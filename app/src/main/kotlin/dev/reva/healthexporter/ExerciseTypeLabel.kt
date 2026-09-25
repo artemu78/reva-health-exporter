@@ -2,68 +2,70 @@ package dev.reva.healthexporter
 
 import androidx.health.connect.client.records.ExerciseSessionRecord
 
-/** Display names for the SDK 1.1 exercise types; preserve unknown future codes. */
-internal fun exerciseTypeLabel(type: Int): String = when (type) {
-    ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT -> "Other workout"
-    ExerciseSessionRecord.EXERCISE_TYPE_BADMINTON -> "Badminton"
-    ExerciseSessionRecord.EXERCISE_TYPE_BASEBALL -> "Baseball"
-    ExerciseSessionRecord.EXERCISE_TYPE_BASKETBALL -> "Basketball"
-    ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> "Biking"
-    ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> "Biking stationary"
-    ExerciseSessionRecord.EXERCISE_TYPE_BOOT_CAMP -> "Boot camp"
-    ExerciseSessionRecord.EXERCISE_TYPE_BOXING -> "Boxing"
-    ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS -> "Calisthenics"
-    ExerciseSessionRecord.EXERCISE_TYPE_CRICKET -> "Cricket"
-    ExerciseSessionRecord.EXERCISE_TYPE_DANCING -> "Dancing"
-    ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL -> "Elliptical"
-    ExerciseSessionRecord.EXERCISE_TYPE_EXERCISE_CLASS -> "Exercise class"
-    ExerciseSessionRecord.EXERCISE_TYPE_FENCING -> "Fencing"
-    ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AMERICAN -> "Football american"
-    ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AUSTRALIAN -> "Football australian"
-    ExerciseSessionRecord.EXERCISE_TYPE_FRISBEE_DISC -> "Frisbee disc"
-    ExerciseSessionRecord.EXERCISE_TYPE_GOLF -> "Golf"
-    ExerciseSessionRecord.EXERCISE_TYPE_GUIDED_BREATHING -> "Guided breathing"
-    ExerciseSessionRecord.EXERCISE_TYPE_GYMNASTICS -> "Gymnastics"
-    ExerciseSessionRecord.EXERCISE_TYPE_HANDBALL -> "Handball"
-    ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> "High intensity interval training"
-    ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> "Hiking"
-    ExerciseSessionRecord.EXERCISE_TYPE_ICE_HOCKEY -> "Ice hockey"
-    ExerciseSessionRecord.EXERCISE_TYPE_ICE_SKATING -> "Ice skating"
-    ExerciseSessionRecord.EXERCISE_TYPE_MARTIAL_ARTS -> "Martial arts"
-    ExerciseSessionRecord.EXERCISE_TYPE_PADDLING -> "Paddling"
-    ExerciseSessionRecord.EXERCISE_TYPE_PARAGLIDING -> "Paragliding"
-    ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> "Pilates"
-    ExerciseSessionRecord.EXERCISE_TYPE_RACQUETBALL -> "Racquetball"
-    ExerciseSessionRecord.EXERCISE_TYPE_ROCK_CLIMBING -> "Rock climbing"
-    ExerciseSessionRecord.EXERCISE_TYPE_ROLLER_HOCKEY -> "Roller hockey"
-    ExerciseSessionRecord.EXERCISE_TYPE_ROWING -> "Rowing"
-    ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE -> "Rowing machine"
-    ExerciseSessionRecord.EXERCISE_TYPE_RUGBY -> "Rugby"
-    ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> "Running"
-    ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> "Running treadmill"
-    ExerciseSessionRecord.EXERCISE_TYPE_SAILING -> "Sailing"
-    ExerciseSessionRecord.EXERCISE_TYPE_SCUBA_DIVING -> "Scuba diving"
-    ExerciseSessionRecord.EXERCISE_TYPE_SKATING -> "Skating"
-    ExerciseSessionRecord.EXERCISE_TYPE_SKIING -> "Skiing"
-    ExerciseSessionRecord.EXERCISE_TYPE_SNOWBOARDING -> "Snowboarding"
-    ExerciseSessionRecord.EXERCISE_TYPE_SNOWSHOEING -> "Snowshoeing"
-    ExerciseSessionRecord.EXERCISE_TYPE_SOCCER -> "Soccer"
-    ExerciseSessionRecord.EXERCISE_TYPE_SOFTBALL -> "Softball"
-    ExerciseSessionRecord.EXERCISE_TYPE_SQUASH -> "Squash"
-    ExerciseSessionRecord.EXERCISE_TYPE_STAIR_CLIMBING -> "Stair climbing"
-    ExerciseSessionRecord.EXERCISE_TYPE_STAIR_CLIMBING_MACHINE -> "Stair climbing machine"
-    ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> "Strength training"
-    ExerciseSessionRecord.EXERCISE_TYPE_STRETCHING -> "Stretching"
-    ExerciseSessionRecord.EXERCISE_TYPE_SURFING -> "Surfing"
-    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER -> "Swimming open water"
-    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> "Swimming pool"
-    ExerciseSessionRecord.EXERCISE_TYPE_TABLE_TENNIS -> "Table tennis"
-    ExerciseSessionRecord.EXERCISE_TYPE_TENNIS -> "Tennis"
-    ExerciseSessionRecord.EXERCISE_TYPE_VOLLEYBALL -> "Volleyball"
-    ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> "Walking"
-    ExerciseSessionRecord.EXERCISE_TYPE_WATER_POLO -> "Water polo"
-    ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> "Weightlifting"
-    ExerciseSessionRecord.EXERCISE_TYPE_WHEELCHAIR -> "Wheelchair"
-    ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> "Yoga"
-    else -> "Unknown workout"
-} + " ($type)"
+/** SDK codes are integers; keep names explicit so release builds need no reflection. */
+private val exerciseTypeLabels = mapOf(
+    ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT to "Other workout",
+    ExerciseSessionRecord.EXERCISE_TYPE_BADMINTON to "Badminton",
+    ExerciseSessionRecord.EXERCISE_TYPE_BASEBALL to "Baseball",
+    ExerciseSessionRecord.EXERCISE_TYPE_BASKETBALL to "Basketball",
+    ExerciseSessionRecord.EXERCISE_TYPE_BIKING to "Biking",
+    ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY to "Biking stationary",
+    ExerciseSessionRecord.EXERCISE_TYPE_BOOT_CAMP to "Boot camp",
+    ExerciseSessionRecord.EXERCISE_TYPE_BOXING to "Boxing",
+    ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS to "Calisthenics",
+    ExerciseSessionRecord.EXERCISE_TYPE_CRICKET to "Cricket",
+    ExerciseSessionRecord.EXERCISE_TYPE_DANCING to "Dancing",
+    ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL to "Elliptical",
+    ExerciseSessionRecord.EXERCISE_TYPE_EXERCISE_CLASS to "Exercise class",
+    ExerciseSessionRecord.EXERCISE_TYPE_FENCING to "Fencing",
+    ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AMERICAN to "Football american",
+    ExerciseSessionRecord.EXERCISE_TYPE_FOOTBALL_AUSTRALIAN to "Football australian",
+    ExerciseSessionRecord.EXERCISE_TYPE_FRISBEE_DISC to "Frisbee disc",
+    ExerciseSessionRecord.EXERCISE_TYPE_GOLF to "Golf",
+    ExerciseSessionRecord.EXERCISE_TYPE_GUIDED_BREATHING to "Guided breathing",
+    ExerciseSessionRecord.EXERCISE_TYPE_GYMNASTICS to "Gymnastics",
+    ExerciseSessionRecord.EXERCISE_TYPE_HANDBALL to "Handball",
+    ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING to "High intensity interval training",
+    ExerciseSessionRecord.EXERCISE_TYPE_HIKING to "Hiking",
+    ExerciseSessionRecord.EXERCISE_TYPE_ICE_HOCKEY to "Ice hockey",
+    ExerciseSessionRecord.EXERCISE_TYPE_ICE_SKATING to "Ice skating",
+    ExerciseSessionRecord.EXERCISE_TYPE_MARTIAL_ARTS to "Martial arts",
+    ExerciseSessionRecord.EXERCISE_TYPE_PADDLING to "Paddling",
+    ExerciseSessionRecord.EXERCISE_TYPE_PARAGLIDING to "Paragliding",
+    ExerciseSessionRecord.EXERCISE_TYPE_PILATES to "Pilates",
+    ExerciseSessionRecord.EXERCISE_TYPE_RACQUETBALL to "Racquetball",
+    ExerciseSessionRecord.EXERCISE_TYPE_ROCK_CLIMBING to "Rock climbing",
+    ExerciseSessionRecord.EXERCISE_TYPE_ROLLER_HOCKEY to "Roller hockey",
+    ExerciseSessionRecord.EXERCISE_TYPE_ROWING to "Rowing",
+    ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE to "Rowing machine",
+    ExerciseSessionRecord.EXERCISE_TYPE_RUGBY to "Rugby",
+    ExerciseSessionRecord.EXERCISE_TYPE_RUNNING to "Running",
+    ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL to "Running treadmill",
+    ExerciseSessionRecord.EXERCISE_TYPE_SAILING to "Sailing",
+    ExerciseSessionRecord.EXERCISE_TYPE_SCUBA_DIVING to "Scuba diving",
+    ExerciseSessionRecord.EXERCISE_TYPE_SKATING to "Skating",
+    ExerciseSessionRecord.EXERCISE_TYPE_SKIING to "Skiing",
+    ExerciseSessionRecord.EXERCISE_TYPE_SNOWBOARDING to "Snowboarding",
+    ExerciseSessionRecord.EXERCISE_TYPE_SNOWSHOEING to "Snowshoeing",
+    ExerciseSessionRecord.EXERCISE_TYPE_SOCCER to "Soccer",
+    ExerciseSessionRecord.EXERCISE_TYPE_SOFTBALL to "Softball",
+    ExerciseSessionRecord.EXERCISE_TYPE_SQUASH to "Squash",
+    ExerciseSessionRecord.EXERCISE_TYPE_STAIR_CLIMBING to "Stair climbing",
+    ExerciseSessionRecord.EXERCISE_TYPE_STAIR_CLIMBING_MACHINE to "Stair climbing machine",
+    ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING to "Strength training",
+    ExerciseSessionRecord.EXERCISE_TYPE_STRETCHING to "Stretching",
+    ExerciseSessionRecord.EXERCISE_TYPE_SURFING to "Surfing",
+    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER to "Swimming open water",
+    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL to "Swimming pool",
+    ExerciseSessionRecord.EXERCISE_TYPE_TABLE_TENNIS to "Table tennis",
+    ExerciseSessionRecord.EXERCISE_TYPE_TENNIS to "Tennis",
+    ExerciseSessionRecord.EXERCISE_TYPE_VOLLEYBALL to "Volleyball",
+    ExerciseSessionRecord.EXERCISE_TYPE_WALKING to "Walking",
+    ExerciseSessionRecord.EXERCISE_TYPE_WATER_POLO to "Water polo",
+    ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING to "Weightlifting",
+    ExerciseSessionRecord.EXERCISE_TYPE_WHEELCHAIR to "Wheelchair",
+    ExerciseSessionRecord.EXERCISE_TYPE_YOGA to "Yoga",
+)
+
+internal fun exerciseTypeLabel(type: Int): String =
+    "${exerciseTypeLabels[type] ?: "Unknown workout"} ($type)"
