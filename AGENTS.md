@@ -8,6 +8,8 @@ The app reads health data that Xiaomi Mi Fitness exposes through Health Connect 
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the application structure, [ROADMAP.md](ROADMAP.md) for the dependency-ordered implementation plan, and [TESTING.md](TESTING.md) for the mandatory test strategy.
 
+Read [CONTEXT.md](CONTEXT.md) for the shared vocabulary of external systems, data, interface elements, and processes. Use its canonical terms in discussions, issues, and documentation, and update it when domain meanings change. Keep definitions concise; implementation mappings and code links belong in ARCHITECTURE.md.
+
 ## Issue and pull-request workflow
 
 - Before starting a new feature or issue, check all open pull requests (including drafts), the current branch, and local uncommitted changes. Review pending PRs for dependencies and overlapping files, and tell the user which pending work could conflict with the new task before making implementation changes.
