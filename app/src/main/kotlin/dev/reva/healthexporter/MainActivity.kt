@@ -1,11 +1,7 @@
 package dev.reva.healthexporter
 
-import android.Manifest
-import android.app.TimePickerDialog
 import android.content.ActivityNotFoundException
-import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -14,13 +10,10 @@ import android.text.style.RelativeSizeSpan
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.RadioGroup
-import android.widget.SeekBar
-import android.widget.Switch
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -33,11 +26,8 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     companion object {
@@ -81,8 +71,7 @@ class MainActivity : ComponentActivity() {
     private val exportStateStore by lazy { SharedPreferencesExportStateStore(this) }
     private val exportHistoryStore by lazy { SharedPreferencesExportHistoryStore(this) }
     private val exportHistoryPresenter by lazy { ExportHistoryPresenter(ZoneId.systemDefault()) }
-    private val emaConfigStore by lazy { SharedPreferencesEmaConfigStore(this) }
-    private val emaStore by lazy { emaEventStore(this) }
+    private val emaSettingsController by lazy { EmaSettingsController(this) }
     private var matrixWindowsBack = 0
     private lateinit var navigator: ScreenNavigator
     private val matrixPage: Int get() = navigator.currentScreen
@@ -186,8 +175,8 @@ class MainActivity : ComponentActivity() {
         findViewById<Button>(R.id.background_probe_trigger).setOnClickListener {
             triggerBackgroundProbe()
         }
-        setupEmaSettings()
-        reconcileEmaSchedule()
+        emaSettingsController.setup()
+        emaSettingsController.reconcileSchedule()
         renderBackgroundAccess()
     }
 
@@ -282,134 +271,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    private fun setupEmaSettings() {
-        val config = emaConfigStore.load()
-        val enabled = findViewById<Switch>(R.id.ema_enabled)
-        val start = findViewById<Button>(R.id.ema_active_start)
-        val end = findViewById<Button>(R.id.ema_active_end)
-        val count = findViewById<SeekBar>(R.id.ema_count)
-        val countValue = findViewById<TextView>(R.id.ema_count_value)
-        val categories = findViewById<EditText>(R.id.ema_categories)
-        enabled.isChecked = config.notificationsEnabled
-        start.tag = config.activeStart
-        end.tag = config.activeEnd
-        renderEmaTimeButton(start, true)
-        renderEmaTimeButton(end, false)
-        count.progress = config.checkInsPerDay
-        countValue.text = getString(R.string.ema_count, count.progress)
-        count.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                countValue.text = getString(R.string.ema_count, progress)
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-        })
-        categories.setText(config.activityCategories.joinToString("\n") { it.label })
-        start.setOnClickListener { chooseEmaTime(start, true) }
-        end.setOnClickListener { chooseEmaTime(end, false) }
-        findViewById<Button>(R.id.ema_save_settings).setOnClickListener {
-            saveEmaSettings()
-        }
-        findViewById<Button>(R.id.ema_check_in_now).setOnClickListener {
-            startManualEmaCheckIn()
-        }
-        renderEmaSummary()
-    }
-
-    private fun chooseEmaTime(button: Button, isStart: Boolean) {
-        val current = button.tag as LocalTime
-        TimePickerDialog(this, { _, hour, minute ->
-            button.tag = LocalTime.of(hour, minute)
-            renderEmaTimeButton(button, isStart)
-        }, current.hour, current.minute, true).show()
-    }
-
-    private fun renderEmaTimeButton(button: Button, isStart: Boolean) {
-        val value = (button.tag as LocalTime).format(DateTimeFormatter.ofPattern("HH:mm"))
-        button.text = getString(if (isStart) R.string.ema_active_start else R.string.ema_active_end, value)
-    }
-
-    private fun saveEmaSettings() {
-        val oldConfig = emaConfigStore.load()
-        val labels = findViewById<EditText>(R.id.ema_categories).text.lines()
-            .map(String::trim).filter(String::isNotEmpty).distinct()
-        val start = findViewById<Button>(R.id.ema_active_start).tag as LocalTime
-        val end = findViewById<Button>(R.id.ema_active_end).tag as LocalTime
-        if (labels.isEmpty() || start == end) {
-            findViewById<TextView>(R.id.ema_settings_status).text = getString(R.string.ema_settings_invalid)
-            return
-        }
-        val priorIds = oldConfig.activityCategories.associate { it.label to it.id }
-        val usedIds = mutableSetOf<String>()
-        val configuredCategories = labels.mapIndexed { index, label ->
-            val base = priorIds[label] ?: label.lowercase()
-                .replace(Regex("[^a-z0-9]+"), "_").trim('_').ifBlank { "activity_${index + 1}" }
-            var id = base
-            var suffix = 2
-            while (!usedIds.add(id)) id = "${base}_${suffix++}"
-            EmaActivityCategory(id, label)
-        }
-        val config = EmaConfig(
-            activeStart = start,
-            activeEnd = end,
-            checkInsPerDay = findViewById<SeekBar>(R.id.ema_count).progress,
-            notificationsEnabled = findViewById<Switch>(R.id.ema_enabled).isChecked,
-            activityCategories = configuredCategories,
-        )
-        emaConfigStore.save(config)
-        EmaScheduleCoordinator(
-            store = emaStore,
-            workGateway = WorkManagerEmaGateway(this),
-            promptHandler = EmaPromptHandler(emaStore, AndroidEmaNotificationGateway(this)),
-        ).reconfigure(Instant.now(), ZoneId.systemDefault(), config)
-        requestEmaNotificationPermission(config)
-        findViewById<TextView>(R.id.ema_settings_status).text = getString(R.string.ema_settings_saved)
-    }
-
-    private fun reconcileEmaSchedule() {
-        val config = emaConfigStore.load()
-        EmaScheduleCoordinator(
-            store = emaStore,
-            workGateway = WorkManagerEmaGateway(this),
-            promptHandler = EmaPromptHandler(emaStore, AndroidEmaNotificationGateway(this)),
-        ).reconcile(Instant.now(), ZoneId.systemDefault(), config)
-        requestEmaNotificationPermission(config)
-    }
-
-    private fun requestEmaNotificationPermission(config: EmaConfig) {
-        if (
-            config.notificationsEnabled && Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            val preferences = getSharedPreferences("reva_ema_permissions", Context.MODE_PRIVATE)
-            val hasRequested = preferences.getBoolean("requested_post_notifications", false)
-            if (!hasRequested || shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
-                preferences.edit().putBoolean("requested_post_notifications", true).apply()
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 5601)
-            }
-        }
-    }
-
-    private fun startManualEmaCheckIn() {
-        val now = Instant.now()
-        val eventId = UUID.randomUUID().toString()
-        emaStore.save(EmaEvent.pending(eventId, now, ZoneId.systemDefault()))
-        startActivity(
-            Intent(this, EmaCheckInActivity::class.java)
-                .putExtra(WorkManagerEmaGateway.KEY_EVENT_ID, eventId),
-        )
-    }
-
-    private fun renderEmaSummary() {
-        val events = emaStore.all()
-        findViewById<TextView>(R.id.ema_settings_status).text = getString(
-            R.string.ema_summary,
-            events.count { it.status == EmaResponseStatus.ANSWERED },
-            events.count { it.status == EmaResponseStatus.DISMISSED },
-            events.count { it.status == EmaResponseStatus.EXPIRED },
-        )
     }
 
     private fun showInitialExportHistory(inventoryKnown: Boolean) {
@@ -686,7 +547,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         refreshHealthConnectState()
         renderExportStatus()
-        renderEmaSummary()
+        emaSettingsController.renderSummary()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
