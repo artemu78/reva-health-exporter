@@ -68,6 +68,24 @@ class DayDetailsTest {
     }
 
     @Test
+    fun partialEmaDetailsShowOnlyPresentMeasurements() = runBlocking {
+        val date = LocalDate.parse("2026-09-26")
+        val store = InMemoryEmaEventStore().apply {
+            save(EmaEvent.pending("partial", Instant.parse("2026-09-26T09:00:00Z"), ZoneOffset.UTC).copy(
+                schemaVersion = 2,
+                answeredAt = Instant.parse("2026-09-26T09:01:00Z"),
+                answers = EmaAnswers(focus = 5),
+                status = EmaResponseStatus.ANSWERED,
+            ))
+        }
+        val text = DayDetailsLoader(DayDetailsReader { _, _ -> emptyList() }, store)
+            .load(date, ZoneOffset.UTC).groups.single { it.type == DetailType.EMA }.records.single().text
+        org.junit.Assert.assertTrue(text.contains("Focus 5/5"))
+        org.junit.Assert.assertFalse(text.contains("Mood"))
+        org.junit.Assert.assertFalse(text.contains("null/5"))
+    }
+
+    @Test
     fun sleepSummarySeparatesAsleepStagesFromSessionDuration() = runBlocking {
         val start = Instant.parse("2026-09-20T00:00:00Z")
         val sleep = CanonicalSleepSessionRecord(start, null, start.plusSeconds(8 * 3600), null,

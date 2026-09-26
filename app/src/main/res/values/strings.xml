@@ -14,6 +14,8 @@
     <string name="ema_energy">Energy</string>
     <string name="ema_focus">Focus</string>
     <string name="ema_stress">Stress</string>
+    <string name="ema_not_set">Not set</string>
+    <string name="ema_value_of_five">%1$d of 5</string>
     <string name="ema_mood_description">Mood, 1 very bad to 5 very good</string>
     <string name="ema_energy_description">Energy, 1 exhausted to 5 highly energetic</string>
     <string name="ema_focus_description">Focus, 1 unable to concentrate to 5 deeply focused</string>

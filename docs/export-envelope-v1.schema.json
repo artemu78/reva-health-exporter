@@ -201,7 +201,7 @@
         ],
         "properties": {
           "schemaVersion": {
-            "const": 1
+            "enum": [1, 2]
           },
           "id": {
             "type": "string",
@@ -285,13 +285,22 @@
               "required": ["status"]
             },
             "then": {
-              "required": [
-                "answeredAt",
-                "mood",
-                "energy",
-                "focus",
-                "stress",
-                "activity"
+              "required": ["answeredAt"],
+              "allOf": [
+                {
+                  "if": { "properties": { "schemaVersion": { "const": 1 } }, "required": ["schemaVersion"] },
+                  "then": { "required": ["mood", "energy", "focus", "stress", "activity"] }
+                },
+                {
+                  "if": { "properties": { "schemaVersion": { "const": 2 } }, "required": ["schemaVersion"] },
+                  "then": {
+                    "anyOf": [
+                      { "required": ["mood"] }, { "required": ["energy"] },
+                      { "required": ["focus"] }, { "required": ["stress"] },
+                      { "required": ["activity"] }
+                    ]
+                  }
+                }
               ]
             },
             "else": {
@@ -309,6 +318,10 @@
                 ]
               }
             }
+          },
+          {
+            "if": { "required": ["activityLabel"] },
+            "then": { "required": ["activity"] }
           }
         ],
         "additionalProperties": true

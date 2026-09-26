@@ -1,6 +1,7 @@
 package dev.reva.healthexporter
 
 import android.os.Bundle
+import android.content.res.ColorStateList
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -21,6 +22,9 @@ class EmaCheckInActivity : ComponentActivity() {
             AndroidEmaNotificationGateway(it)
         }
         internal var now: () -> Instant = Instant::now
+        private const val NOT_SET_ACTIVITY = "__not_set__"
+        private const val STATE_ACTIVITY = "ema.activity"
+        private const val STATE_SLIDER = "ema.slider."
 
         internal fun resetTestFactories() {
             eventStoreFactory = { emaEventStore(it) }
@@ -33,6 +37,7 @@ class EmaCheckInActivity : ComponentActivity() {
     private lateinit var eventId: String
     private lateinit var store: EmaEventStore
     private var selectedActivity: EmaActivityCategory? = null
+    private lateinit var activityCategories: List<EmaActivityCategory>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,7 +54,12 @@ class EmaCheckInActivity : ComponentActivity() {
         bindSlider(R.id.ema_energy, R.id.ema_energy_value)
         bindSlider(R.id.ema_focus, R.id.ema_focus_value)
         bindSlider(R.id.ema_stress, R.id.ema_stress_value)
-        bindActivities(configStoreFactory(this).load().activityCategories)
+        activityCategories = configStoreFactory(this).load().activityCategories
+        bindActivities(activityCategories, savedInstanceState?.getString(STATE_ACTIVITY))
+        if (savedInstanceState != null) {
+            sliderIds.forEach { id -> findViewById<SeekBar>(id).progress = savedInstanceState.getInt("$STATE_SLIDER$id") }
+        }
+        updateSubmitEnabled()
         findViewById<Button>(R.id.ema_submit).setOnClickListener { submit() }
         findViewById<Button>(R.id.ema_skip).setOnClickListener {
             EmaPromptHandler(store, notificationFactory(this)).dismiss(eventId)
@@ -66,10 +76,20 @@ class EmaCheckInActivity : ComponentActivity() {
     private fun bindSlider(sliderId: Int, valueId: Int) {
         val slider = findViewById<SeekBar>(sliderId)
         val value = findViewById<TextView>(valueId)
-        value.text = slider.progress.toString()
+        val activeProgressTint = slider.progressTintList
+        val activeThumbTint = slider.thumbTintList
+        fun render(progress: Int) {
+            val isSet = progress in 1..5
+            value.text = if (isSet) progress.toString() else getString(R.string.ema_not_set)
+            slider.stateDescription = if (isSet) getString(R.string.ema_value_of_five, progress) else getString(R.string.ema_not_set)
+            slider.progressTintList = if (isSet) activeProgressTint else ColorStateList.valueOf(getColor(R.color.ema_unset))
+            slider.thumbTintList = if (isSet) activeThumbTint else ColorStateList.valueOf(getColor(R.color.ema_unset))
+        }
+        render(slider.progress)
         slider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                value.text = progress.toString()
+                render(progress)
+                updateSubmitEnabled()
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
@@ -77,37 +97,52 @@ class EmaCheckInActivity : ComponentActivity() {
         })
     }
 
-    private fun bindActivities(categories: List<EmaActivityCategory>) {
+    private fun bindActivities(categories: List<EmaActivityCategory>, restoredActivityId: String?) {
         val group = findViewById<RadioGroup>(R.id.ema_activity)
+        group.addView(activityButton(NOT_SET_ACTIVITY, getString(R.string.ema_not_set)))
         categories.forEach { category ->
-            group.addView(RadioButton(this).apply {
-                id = View.generateViewId()
-                tag = category.id
-                text = category.label
-                textSize = 16f
-                minHeight = dp(48)
-            })
+            group.addView(activityButton(category.id, category.label))
         }
         group.setOnCheckedChangeListener { radioGroup, checkedId ->
             val selectedId = radioGroup.findViewById<RadioButton>(checkedId)?.tag as? String
             selectedActivity = categories.firstOrNull { it.id == selectedId }
-            findViewById<Button>(R.id.ema_submit).isEnabled = selectedActivity != null
+            updateSubmitEnabled()
+        }
+        restoredActivityId?.let { id ->
+            (0 until group.childCount).map { group.getChildAt(it) as RadioButton }
+                .firstOrNull { it.tag == id }?.isChecked = true
         }
     }
 
+    private fun activityButton(activityId: String, label: String) = RadioButton(this).apply {
+        id = View.generateViewId()
+        tag = activityId
+        text = label
+        textSize = 16f
+        minHeight = dp(48)
+    }
+
+    private fun updateSubmitEnabled() {
+        if (!::activityCategories.isInitialized) return
+        findViewById<Button>(R.id.ema_submit).isEnabled =
+            sliderIds.any { findViewById<SeekBar>(it).progress in 1..5 } || selectedActivity != null
+    }
+
     private fun submit() {
-        val activity = selectedActivity ?: return
+        val answers = EmaAnswers(
+            mood = findViewById<SeekBar>(R.id.ema_mood).progress.answerOrNull(),
+            energy = findViewById<SeekBar>(R.id.ema_energy).progress.answerOrNull(),
+            focus = findViewById<SeekBar>(R.id.ema_focus).progress.answerOrNull(),
+            stress = findViewById<SeekBar>(R.id.ema_stress).progress.answerOrNull(),
+        ).takeIf { it.hasCoreAnswer() }
+        val activity = selectedActivity
+        if (answers == null && activity == null) return
         val saved = EmaCheckInService(store).answer(
             eventId = eventId,
             answeredAt = now(),
-            answers = EmaAnswers(
-                mood = findViewById<SeekBar>(R.id.ema_mood).progress,
-                energy = findViewById<SeekBar>(R.id.ema_energy).progress,
-                focus = findViewById<SeekBar>(R.id.ema_focus).progress,
-                stress = findViewById<SeekBar>(R.id.ema_stress).progress,
-            ),
-            activity = activity.id,
-            activityLabel = activity.label,
+            answers = answers,
+            activity = activity?.id,
+            activityLabel = activity?.label,
             note = findViewById<EditText>(R.id.ema_note).text.toString(),
         )
         if (saved) {
@@ -119,4 +154,15 @@ class EmaCheckInActivity : ComponentActivity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        sliderIds.forEach { id -> outState.putInt("$STATE_SLIDER$id", findViewById<SeekBar>(id).progress) }
+        val group = findViewById<RadioGroup>(R.id.ema_activity)
+        outState.putString(STATE_ACTIVITY, group.findViewById<RadioButton>(group.checkedRadioButtonId)?.tag as? String)
+    }
+
+    private fun Int.answerOrNull(): Int? = takeIf { it in 1..5 }
+    private val sliderIds get() = listOf(R.id.ema_mood, R.id.ema_energy, R.id.ema_focus, R.id.ema_stress)
+
 }

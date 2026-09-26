@@ -154,6 +154,41 @@ class CombinedExportSchemaTest {
     }
 
     @Test
+    fun combinedEnvelopeRoundTripsPartialVersionTwoEvent() {
+        val event = EmaEvent(
+            schemaVersion = 2,
+            id = "partial-export",
+            scheduleDate = LocalDate.parse("2026-09-26"),
+            scheduledAt = Instant.parse("2026-09-26T09:00:00Z"),
+            answeredAt = Instant.parse("2026-09-26T09:01:00Z"),
+            answers = EmaAnswers(stress = 2),
+            activity = null,
+            activityLabel = null,
+            note = null,
+            status = EmaResponseStatus.ANSWERED,
+            timezone = "UTC",
+        )
+        val batch = ExportBatch(
+            header = BatchHeader(
+                installationId = "synthetic-installation",
+                batchId = "synthetic-batch",
+                createdAt = Instant.parse("2026-09-26T10:00:00Z"),
+                timeWindow = TimeWindow(Instant.parse("2026-09-26T00:00:00Z"), Instant.parse("2026-09-27T00:00:00Z")),
+                recordCount = 0,
+                recordTypes = emptyList(),
+            ),
+            records = emptyList(),
+            emaEvents = listOf(event),
+        )
+        val serialized = serializer.serializeToJson(batch)
+        val schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
+            .getSchema(getSchemaFile().readText())
+        assertTrue(schema.validate(objectMapper.readTree(serialized)).isEmpty())
+        assertEquals(event, serializer.parseJson(serialized).emaEvents.single())
+        org.junit.Assert.assertFalse(serialized.contains("\"mood\":0"))
+    }
+
+    @Test
     fun rejectsMissingOrInvalidExportSchemaVersion() {
         val missingVersion = """
             {
