@@ -17,7 +17,7 @@ Reva collects two distinct categories of health and subjective well-being observ
 
 2. **Subjective Self-Reported Data (`emaEvents`):**
    - In-the-moment user self-reports collected via experience-sampling notification prompts.
-   - Metrics include 1–5 Likert scale responses for mood, energy, focus, and stress, current activity classification, and optional freeform notes.
+   - Metrics include any submitted subset of 1–5 mood, energy, focus, and stress responses, optional current activity classification, and optional freeform notes.
    - Preserves state lifecycle semantics (`pending`, `answered`, `dismissed`, `expired`).
 
 To maintain scientific integrity and prevent invalid correlation assumptions, **EMA observations are never mapped to Health Connect records or aggregated into physiological batches**. The combined export envelope preserves both as separate, versioned top-level arrays.
@@ -132,7 +132,8 @@ stateDiagram-v2
 
 **Status Invariants:**
 1. **`answered` events:**
-   - Must contain `answeredAt`, `mood`, `energy`, `focus`, `stress`, and `activity`.
+   - v1 events must contain `answeredAt`, all four scales, and `activity`.
+   - v2 events must contain `answeredAt` plus at least one scale or `activity`; missing values are absent, never zero.
    - May contain `activityLabel`, `note` (up to 280 characters), and `additionalAnswers`.
 2. **`pending`, `dismissed`, and `expired` events:**
    - Must **never** contain numeric ratings (`mood`, `energy`, etc.), `answeredAt`, `activity`, or `note`.

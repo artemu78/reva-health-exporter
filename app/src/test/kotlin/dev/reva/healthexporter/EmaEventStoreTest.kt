@@ -4,6 +4,7 @@ import java.time.Instant
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -32,7 +33,7 @@ class EmaEventStoreTest {
         )
 
         val restored = FileEmaEventStore(directory).get("event-1")
-        assertEquals(1, restored?.schemaVersion)
+        assertEquals(2, restored?.schemaVersion)
         assertEquals(scheduledAt, restored?.scheduledAt)
         assertEquals(answeredAt, restored?.answeredAt)
         assertEquals(4, restored?.answers?.mood)
@@ -76,6 +77,57 @@ class EmaEventStoreTest {
         )
     }
 
+    @Test
+    fun partialAnswersAndActivityOnlyAnswersRoundTripWithoutZeroes() {
+        val directory = temporaryFolder.newFolder("partial-ema-events")
+        val store = FileEmaEventStore(directory)
+        val service = EmaCheckInService(store)
+        store.save(EmaEvent.pending("one-scale", scheduledAt, ZoneId.of("UTC")))
+        store.save(EmaEvent.pending("activity-only", scheduledAt, ZoneId.of("UTC")))
+
+        service.answer("one-scale", answeredAt, EmaAnswers(mood = 4), null, null)
+        service.answer("activity-only", answeredAt, null, "resting", null, "Resting")
+
+        val scale = FileEmaEventStore(directory).get("one-scale")!!
+        assertEquals(2, scale.schemaVersion)
+        assertEquals(4, scale.answers?.mood)
+        assertNull(scale.answers?.energy)
+        assertNull(scale.activity)
+        org.junit.Assert.assertFalse(serializeEmaEvent(scale).contains(Regex("\\\"(energy|focus|stress)\\\"\\s*:\\s*0")))
+
+        val activity = FileEmaEventStore(directory).get("activity-only")!!
+        assertNull(activity.answers)
+        assertEquals("resting", activity.activity)
+    }
+
+    @Test
+    fun everyPresentScaleRejectsValuesOutsideOneToFive() {
+        listOf(
+            { EmaAnswers(mood = 0) },
+            { EmaAnswers(energy = 6) },
+            { EmaAnswers(focus = -1) },
+            { EmaAnswers(stress = 9) },
+        ).forEach { factory -> assertThrows(IllegalArgumentException::class.java) { factory() } }
+    }
+
+    @Test
+    fun answeredEventRequiresAtLeastOneMeaningfulAnswer() {
+        val store = InMemoryEmaEventStore().apply {
+            save(EmaEvent.pending("empty", scheduledAt, ZoneId.of("UTC")))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            EmaCheckInService(store).answer("empty", answeredAt, EmaAnswers(), null, "note only")
+        }
+    }
+
+    @Test
+    fun versionTwoDeserializerAcceptsPartialAnswersAndRejectsEmptyAnsweredEvent() {
+        val partial = """{"schemaVersion":2,"id":"partial","scheduleDate":"2026-09-15","scheduledAt":"2026-09-15T09:15:30.123Z","answeredAt":"2026-09-15T09:17:02.456Z","focus":5,"status":"answered","timezone":"UTC"}"""
+        val empty = """{"schemaVersion":2,"id":"empty","scheduleDate":"2026-09-15","scheduledAt":"2026-09-15T09:15:30.123Z","answeredAt":"2026-09-15T09:17:02.456Z","status":"answered","timezone":"UTC"}"""
+        assertEquals(5, deserializeEmaEvent(partial)?.answers?.focus)
+        assertNull(deserializeEmaEvent(empty))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun fileStoreRejectsRegularFileAsDirectory() {
         val file = temporaryFolder.newFile("not-a-directory")
@@ -84,7 +136,7 @@ class EmaEventStoreTest {
 
     @Test
     fun deserializeRejectsUnsupportedSchemaVersion() {
-        val json = """{"schemaVersion":2,"id":"e1","scheduleDate":"2026-09-15","scheduledAt":"2026-09-15T09:15:30.123Z","status":"pending","timezone":"UTC"}"""
+        val json = """{"schemaVersion":99,"id":"e1","scheduleDate":"2026-09-15","scheduledAt":"2026-09-15T09:15:30.123Z","status":"pending","timezone":"UTC"}"""
         assertNull(deserializeEmaEvent(json))
     }
 

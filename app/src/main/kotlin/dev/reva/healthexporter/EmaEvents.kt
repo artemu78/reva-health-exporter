@@ -23,14 +23,14 @@ enum class EmaResponseStatus(val wireValue: String) {
 }
 
 data class EmaAnswers(
-    val mood: Int,
-    val energy: Int,
-    val focus: Int,
-    val stress: Int,
+    val mood: Int? = null,
+    val energy: Int? = null,
+    val focus: Int? = null,
+    val stress: Int? = null,
     val additional: Map<String, Int> = emptyMap(),
 ) {
     init {
-        listOf(mood, energy, focus, stress).forEach {
+        listOfNotNull(mood, energy, focus, stress).forEach {
             require(it in 1..5) { "EMA scale values must be between 1 and 5" }
         }
         require(additional.keys.none { it in CORE_KEYS }) { "Additional answers must use distinct keys" }
@@ -39,6 +39,8 @@ data class EmaAnswers(
     companion object {
         val CORE_KEYS = setOf("mood", "energy", "focus", "stress")
     }
+
+    fun hasCoreAnswer(): Boolean = listOf(mood, energy, focus, stress).any { it != null }
 }
 
 data class EmaEvent(
@@ -173,17 +175,22 @@ class EmaCheckInService(
     fun answer(
         eventId: String,
         answeredAt: Instant,
-        answers: EmaAnswers,
-        activity: String,
+        answers: EmaAnswers?,
+        activity: String?,
         note: String?,
         activityLabel: String? = null,
     ): Boolean = updatePending(eventId) { event ->
-        require(activity.isNotBlank()) { "Activity is required" }
+        val normalizedActivity = activity?.trim()?.ifBlank { null }
+        val normalizedAnswers = answers?.takeIf { it.hasCoreAnswer() || it.additional.isNotEmpty() }
+        require(normalizedAnswers?.hasCoreAnswer() == true || normalizedActivity != null) {
+            "At least one EMA scale or activity is required"
+        }
         event.copy(
+            schemaVersion = 2,
             answeredAt = answeredAt,
-            answers = answers,
-            activity = activity,
-            activityLabel = activityLabel?.trim()?.ifBlank { null },
+            answers = normalizedAnswers,
+            activity = normalizedActivity,
+            activityLabel = normalizedActivity?.let { activityLabel?.trim()?.ifBlank { null } },
             note = note?.trim()?.take(280)?.ifBlank { null },
             status = EmaResponseStatus.ANSWERED,
         )
@@ -212,10 +219,10 @@ fun emaEventToJson(event: EmaEvent): JsonObject {
         addProperty("scheduledAt", event.scheduledAt.toString())
         event.answeredAt?.let { addProperty("answeredAt", it.toString()) }
         event.answers?.let { answers ->
-            addProperty("mood", answers.mood)
-            addProperty("energy", answers.energy)
-            addProperty("focus", answers.focus)
-            addProperty("stress", answers.stress)
+            answers.mood?.let { addProperty("mood", it) }
+            answers.energy?.let { addProperty("energy", it) }
+            answers.focus?.let { addProperty("focus", it) }
+            answers.stress?.let { addProperty("stress", it) }
             if (answers.additional.isNotEmpty()) {
                 add("additionalAnswers", JsonObject().apply {
                     answers.additional.toSortedMap().forEach { (key, value) -> addProperty(key, value) }
@@ -237,37 +244,19 @@ fun serializeEmaEvent(event: EmaEvent): String {
 fun deserializeEmaEvent(serialized: String): EmaEvent? {
     return try {
         val json = JsonParser.parseString(serialized).asJsonObject
-        val schemaVersion = json.get("schemaVersion")?.asInt ?: 1
-        if (schemaVersion != 1) return null
+        val schemaVersion = json.get("schemaVersion")?.asInt ?: return null
+        if (schemaVersion !in setOf(1, 2)) return null
 
         val status = EmaResponseStatus.fromWireValue(json.get("status")?.asString ?: return null) ?: return null
-        val mood = json.get("mood")?.asInt
-        val energy = json.get("energy")?.asInt
-        val focus = json.get("focus")?.asInt
-        val stress = json.get("stress")?.asInt
-        val core = listOf(mood, energy, focus, stress)
-        val answers = if (core.all { it != null }) {
-            val additional = json.getAsJsonObject("additionalAnswers")?.entrySet()
-                ?.associate { (key, value) -> key to value.asInt }.orEmpty()
-            EmaAnswers(checkNotNull(mood), checkNotNull(energy), checkNotNull(focus), checkNotNull(stress), additional)
-        } else {
-            null
-        }
+        val answers = json.readEmaAnswers()
         val activity = json.get("activity")?.asString
         val answeredAt = json.get("answeredAt")?.asString?.let(Instant::parse)
-
-        if (status == EmaResponseStatus.ANSWERED) {
-            if (answers == null || answeredAt == null || activity == null) return null
-        } else {
-            if (answers != null || answeredAt != null || activity != null || core.any { it != null }) return null
-        }
+        if (!json.hasValidResponseFields(schemaVersion, status, answers, activity, answeredAt)) return null
 
         EmaEvent(
             schemaVersion = schemaVersion,
             id = json.get("id")?.asString ?: return null,
-            scheduleDate = json.get("scheduleDate")?.asString?.let(LocalDate::parse)
-                ?: Instant.parse(json.get("scheduledAt")?.asString ?: return null)
-                    .atZone(ZoneId.of(json.get("timezone")?.asString ?: return null)).toLocalDate(),
+            scheduleDate = json.readScheduleDate() ?: return null,
             scheduledAt = Instant.parse(json.get("scheduledAt")?.asString ?: return null),
             answeredAt = answeredAt,
             answers = answers,
@@ -280,4 +269,42 @@ fun deserializeEmaEvent(serialized: String): EmaEvent? {
     } catch (_: Exception) {
         null
     }
+}
+
+private fun JsonObject.readEmaAnswers(): EmaAnswers? {
+    val answers = EmaAnswers(
+        mood = get("mood")?.asInt,
+        energy = get("energy")?.asInt,
+        focus = get("focus")?.asInt,
+        stress = get("stress")?.asInt,
+        additional = getAsJsonObject("additionalAnswers")?.entrySet()
+            ?.associate { (key, value) -> key to value.asInt }.orEmpty(),
+    )
+    return answers.takeIf { it.hasCoreAnswer() || it.additional.isNotEmpty() }
+}
+
+private fun JsonObject.hasValidResponseFields(
+    schemaVersion: Int,
+    status: EmaResponseStatus,
+    answers: EmaAnswers?,
+    activity: String?,
+    answeredAt: Instant?,
+): Boolean = if (status == EmaResponseStatus.ANSWERED) {
+    val hasRequiredAnswer = when (schemaVersion) {
+        1 -> answers?.let { listOf(it.mood, it.energy, it.focus, it.stress).all { value -> value != null } } == true &&
+            !activity.isNullOrBlank()
+        2 -> answers?.hasCoreAnswer() == true || !activity.isNullOrBlank()
+        else -> false
+    }
+    answeredAt != null && hasRequiredAnswer && (!activity.isNullOrBlank() || !has("activityLabel"))
+} else {
+    answers == null && answeredAt == null && activity == null &&
+        listOf("activityLabel", "note", "additionalAnswers").none(::has)
+}
+
+private fun JsonObject.readScheduleDate(): LocalDate? {
+    get("scheduleDate")?.asString?.let { return LocalDate.parse(it) }
+    val scheduledAt = get("scheduledAt")?.asString ?: return null
+    val timezone = get("timezone")?.asString ?: return null
+    return Instant.parse(scheduledAt).atZone(ZoneId.of(timezone)).toLocalDate()
 }

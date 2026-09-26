@@ -3,8 +3,8 @@
 The app can collect brief subjective observations during the day. These observations are intentionally
 separate from Health Connect records and algorithmic scores from other products.
 
-Downstream consumers should follow the versioned
-[EMA Event File Protocol v1](ema-event-v1.md) and its machine-readable JSON Schema.
+Downstream consumers should follow the versioned [EMA Event File Protocol v2](ema-event-v2.md)
+and retain [v1 compatibility](ema-event-v1.md).
 
 ## Prompt schedule
 
@@ -23,13 +23,14 @@ a new one without changing completed historical observations.
 
 ## Check-in record
 
-Every scheduled prompt is persisted before its worker is enqueued. Records use schema version 1 and keep:
+Every scheduled prompt is persisted before its worker is enqueued. Pending records may retain schema
+version 1; newly answered records use schema version 2 and keep:
 
 - a unique ID and logical schedule date;
 - precise `scheduledAt` and optional `answeredAt` instants;
 - the timezone used when the event was scheduled;
-- numeric mood, energy, focus, and stress values from 1 through 5;
-- a stable activity ID and optional note;
+- any meaningful subset of numeric mood, energy, focus, and stress values from 1 through 5;
+- an optional stable activity ID and optional note;
 - `pending`, `answered`, `dismissed`, or `expired` status;
 - an optional map reserved for future subjective questions.
 
@@ -39,6 +40,10 @@ The four scale meanings are displayed in the check-in screen and remain stable:
 - energy: exhausted to highly energetic;
 - focus: unable to concentrate to deeply focused;
 - stress: completely relaxed to extremely stressed.
+
+All controls start as **Not set**. A check-in can be saved after at least one scale or a meaningful
+activity is selected. Clearing the final meaningful answer disables saving. “Not set” and missing
+answers are never persisted as zero or as an activity ID; a note by itself is not an answer.
 
 Android's notification delete intent records a swipe or clear as `dismissed` when the platform delivers
 that callback. Backing out of the check-in form also records `dismissed`. Unhandled prompts that are superseded

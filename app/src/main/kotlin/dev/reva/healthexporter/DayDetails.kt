@@ -140,7 +140,15 @@ private fun formatEma(event: EmaEvent, zone: ZoneId): String = buildString {
     appendLine("Status: ${event.status.wireValue}")
     event.answeredAt?.let { appendLine("Answered: ${it.atZone(zone)}") }
     event.answers?.let {
-        appendLine("Mood ${it.mood}/5 · Energy ${it.energy}/5 · Focus ${it.focus}/5 · Stress ${it.stress}/5")
+        listOf(
+            "Mood" to it.mood,
+            "Energy" to it.energy,
+            "Focus" to it.focus,
+            "Stress" to it.stress,
+        ).filter { (_, answer) -> answer != null }
+            .joinToString(" · ") { (label, answer) -> "$label $answer/5" }
+            .takeIf { line -> line.isNotEmpty() }
+            ?.let(::appendLine)
         it.additional.toSortedMap().forEach { (key, value) -> appendLine("$key: $value") }
     }
     event.activity?.let { appendLine("Activity: ${event.activityLabel ?: it} ($it)") }
