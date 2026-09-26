@@ -28,9 +28,20 @@ case "$*" in
     "branch --show-current") printf 'main\n' ;;
     "status --porcelain") ;;
     "fetch origin main") ;;
-    "rev-parse HEAD"|"rev-parse origin/main"|"rev-parse v${REVA_TEST_VERSION_NAME}^{}") printf '0123456789abcdef\n' ;;
+    "rev-parse HEAD"|"rev-parse origin/main")
+        if [[ -n "${REVA_TEST_COMMIT_STATE_FILE:-}" && -f "$REVA_TEST_COMMIT_STATE_FILE" ]]; then
+            printf 'fedcba9876543210\n'
+        else
+            printf '0123456789abcdef\n'
+        fi
+        ;;
+    "rev-parse v${REVA_TEST_VERSION_NAME}^{}") printf '0123456789abcdef\n' ;;
+    "rev-parse v${REVA_TEST_OLD_VERSION_NAME:-unused}^{}") printf '9999999999999999\n' ;;
     "tag --list v${REVA_TEST_VERSION_NAME}")
         [[ "${REVA_TEST_LOCAL_TAG_EXISTS:-0}" == "1" ]] && printf 'v%s\n' "$REVA_TEST_VERSION_NAME"
+        ;;
+    "tag --list v${REVA_TEST_OLD_VERSION_NAME:-unused}")
+        [[ "${REVA_TEST_VERSION_BUMP:-0}" == "1" ]] && printf 'v%s\n' "$REVA_TEST_OLD_VERSION_NAME"
         ;;
     "ls-remote --exit-code --tags origin refs/tags/v${REVA_TEST_VERSION_NAME}")
         [[ "${REVA_TEST_REMOTE_TAG_EXISTS:-0}" == "1" ]] && exit 0
@@ -39,6 +50,11 @@ case "$*" in
     "fetch origin refs/tags/v${REVA_TEST_VERSION_NAME}:refs/tags/v${REVA_TEST_VERSION_NAME}") ;;
     "tag -a v${REVA_TEST_VERSION_NAME} -m Reva Health Exporter v${REVA_TEST_VERSION_NAME}") ;;
     "push origin refs/tags/v${REVA_TEST_VERSION_NAME}") ;;
+    "add version.properties") ;;
+    "commit -m Bump version to ${REVA_TEST_VERSION_NAME}")
+        : >"$REVA_TEST_COMMIT_STATE_FILE"
+        ;;
+    "push origin main") ;;
     *) printf 'Unexpected git command: %s\n' "$*" >&2; exit 64 ;;
 esac
 EOF
@@ -334,3 +350,33 @@ grep -Fq 'adb -s 198.51.100.42:40239 install ' "$command_log"
 grep -Fq "Installed and launched Reva Health Exporter v${test_version_name}" <<<"$confirm_output"
 
 echo "release-to-device confirmed reinstall test passed"
+
+: >"$command_log"
+version_bump_project="$test_dir/version-bump-project"
+mkdir -p "$version_bump_project/scripts"
+cp "$script_under_test" "$version_bump_project/scripts/release-to-device.sh"
+printf 'VERSION_CODE=30\nVERSION_NAME=0.1.30\n' >"$version_bump_project/version.properties"
+version_bump_state="$test_dir/version-bump-commit-state"
+version_bump_output=$(
+    PATH="$fake_bin:$PATH" \
+    REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
+    REVA_RELEASE_POLL_SECONDS=0 \
+    REVA_TEST_COMMAND_LOG="$command_log" \
+    REVA_TEST_VERSION_BUMP=1 \
+    REVA_TEST_OLD_VERSION_NAME=0.1.30 \
+    REVA_TEST_VERSION_NAME=0.1.31 \
+    REVA_TEST_VERSION_CODE=31 \
+    REVA_TEST_COMMIT_STATE_FILE="$version_bump_state" \
+        "$version_bump_project/scripts/release-to-device.sh" </dev/null
+)
+
+grep -Fxq 'VERSION_CODE=31' "$version_bump_project/version.properties"
+grep -Fxq 'VERSION_NAME=0.1.31' "$version_bump_project/version.properties"
+grep -Fq 'git add version.properties' "$command_log"
+grep -Fq 'git commit -m Bump version to 0.1.31' "$command_log"
+grep -Fq 'git push origin main' "$command_log"
+grep -Fq 'git tag -a v0.1.31 -m Reva Health Exporter v0.1.31' "$command_log"
+grep -Fq 'Automatically bumped app version from 0.1.30 (30) to 0.1.31 (31).' \
+    <<<"$version_bump_output"
+
+echo "release-to-device automatic version bump test passed"

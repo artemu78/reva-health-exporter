@@ -146,9 +146,11 @@ The tag starts the Android Release workflow. It restores the private signing key
 ### Release and install over Wi-Fi
 
 After the intended pull request is merged, update local `main` so it exactly matches `origin/main`.
-The release command uses the version already present in `version.properties`; it does not create a
-version commit. Before running it, pair and connect the phone through Android's Wireless debugging
-screen, then confirm that `adb devices -l` includes one online IPv4 endpoint:
+If that commit still has the version of an older release, the release command increments
+`VERSION_CODE` and the patch part of `VERSION_NAME`, commits `version.properties`, and pushes that
+commit to `main` before creating the new release tag. Before running it, pair and connect the phone
+through Android's Wireless debugging screen, then confirm that `adb devices -l` includes one online
+IPv4 endpoint:
 
 ```text
 192.0.2.10:40239 device product:example model:example device:example transport_id:1

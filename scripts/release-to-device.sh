@@ -122,9 +122,32 @@ version_name=$(read_property VERSION_NAME "$project_dir/version.properties")
 version_code=$(read_property VERSION_CODE "$project_dir/version.properties")
 [[ "$version_name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "VERSION_NAME is not semantic versioning."
 [[ "$version_code" =~ ^[1-9][0-9]*$ ]] || fail "VERSION_CODE must be a positive integer."
-release_tag="v$version_name"
-apk_name="reva-health-exporter-$release_tag.apk"
-apk_path="$download_dir/$apk_name"
+
+set_release_names() {
+    release_tag="v$version_name"
+    apk_name="reva-health-exporter-$release_tag.apk"
+    apk_path="$download_dir/$apk_name"
+}
+
+automatically_bump_version() {
+    local previous_version_name=$version_name
+    local previous_version_code=$version_code
+    local major minor patch
+    IFS=. read -r major minor patch <<<"$version_name"
+    version_name="$major.$minor.$((10#$patch + 1))"
+    version_code=$((10#$version_code + 1))
+
+    printf 'VERSION_CODE=%s\nVERSION_NAME=%s\n' "$version_code" "$version_name" \
+        >"$project_dir/version.properties"
+    git add version.properties
+    git commit -m "Bump version to $version_name"
+    git push origin main
+    head_sha=$(git rev-parse HEAD)
+    set_release_names
+    echo "Automatically bumped app version from $previous_version_name ($previous_version_code) to $version_name ($version_code)."
+}
+
+set_release_names
 
 [[ $(git branch --show-current) == "main" ]] || fail "Switch to main before releasing."
 [[ -z $(git status --porcelain) ]] || fail "The worktree must be clean before releasing."
@@ -134,44 +157,48 @@ origin_main_sha=$(git rev-parse origin/main)
 [[ "$head_sha" == "$origin_main_sha" ]] || fail "Local main must exactly match origin/main."
 gh auth status >/dev/null
 
-fail_reused_version() {
-    local tag_sha=$1
-    fail "$release_tag already points to commit ${tag_sha:0:12}, but current main is ${head_sha:0:12}. New code was committed without a new app version. Bump both VERSION_CODE and VERSION_NAME in version.properties, commit and push that change, then rerun this script. Existing release tags are not moved."
-}
-
-if [[ -z $(git tag --list "$release_tag") ]]; then
-    set +e
-    git ls-remote --exit-code --tags origin "refs/tags/$release_tag" >/dev/null
-    remote_tag_status=$?
-    set -e
-    if ((remote_tag_status == 0)); then
-        git fetch origin "refs/tags/$release_tag:refs/tags/$release_tag"
+while true; do
+    if [[ -z $(git tag --list "$release_tag") ]]; then
+        set +e
+        git ls-remote --exit-code --tags origin "refs/tags/$release_tag" >/dev/null
+        remote_tag_status=$?
+        set -e
+        if ((remote_tag_status == 0)); then
+            git fetch origin "refs/tags/$release_tag:refs/tags/$release_tag"
+            tag_sha=$(git rev-parse "$release_tag^{}")
+            if [[ "$tag_sha" != "$head_sha" ]]; then
+                automatically_bump_version
+                continue
+            fi
+            echo "Reusing existing remote tag $release_tag."
+        elif ((remote_tag_status != 2)); then
+            fail "Could not inspect remote tag $release_tag."
+        else
+            echo "Creating and pushing $release_tag from synchronized main."
+            git tag -a "$release_tag" -m "Reva Health Exporter $release_tag"
+            git push origin "refs/tags/$release_tag"
+        fi
+    else
         tag_sha=$(git rev-parse "$release_tag^{}")
-        [[ "$tag_sha" == "$head_sha" ]] || fail_reused_version "$tag_sha"
-        echo "Reusing existing remote tag $release_tag."
-    elif ((remote_tag_status != 2)); then
-        fail "Could not inspect remote tag $release_tag."
-    else
-        echo "Creating and pushing $release_tag from synchronized main."
-        git tag -a "$release_tag" -m "Reva Health Exporter $release_tag"
-        git push origin "refs/tags/$release_tag"
+        if [[ "$tag_sha" != "$head_sha" ]]; then
+            automatically_bump_version
+            continue
+        fi
+        set +e
+        git ls-remote --exit-code --tags origin "refs/tags/$release_tag" >/dev/null
+        remote_tag_status=$?
+        set -e
+        if ((remote_tag_status == 0)); then
+            echo "Reusing existing local and remote tag $release_tag."
+        elif ((remote_tag_status == 2)); then
+            echo "Pushing existing local tag $release_tag after an interrupted release."
+            git push origin "refs/tags/$release_tag"
+        else
+            fail "Could not inspect remote tag $release_tag."
+        fi
     fi
-else
-    tag_sha=$(git rev-parse "$release_tag^{}")
-    [[ "$tag_sha" == "$head_sha" ]] || fail_reused_version "$tag_sha"
-    set +e
-    git ls-remote --exit-code --tags origin "refs/tags/$release_tag" >/dev/null
-    remote_tag_status=$?
-    set -e
-    if ((remote_tag_status == 0)); then
-        echo "Reusing existing local and remote tag $release_tag."
-    elif ((remote_tag_status == 2)); then
-        echo "Pushing existing local tag $release_tag after an interrupted release."
-        git push origin "refs/tags/$release_tag"
-    else
-        fail "Could not inspect remote tag $release_tag."
-    fi
-fi
+    break
+done
 
 run_id=""
 for ((poll=1; poll<=max_polls; poll++)); do
