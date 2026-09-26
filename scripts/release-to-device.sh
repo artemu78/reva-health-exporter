@@ -10,6 +10,7 @@ release_workflow="release.yml"
 download_dir=${REVA_RELEASE_DOWNLOAD_DIR:-"$project_dir/build/releases"}
 poll_seconds=${REVA_RELEASE_POLL_SECONDS:-2}
 max_polls=${REVA_RELEASE_MAX_POLLS:-60}
+default_adb_address="192.168.1.100"
 
 fail() {
     echo "Error: $*" >&2
@@ -40,6 +41,15 @@ validate_adb_target() {
         ((10#$octet <= 255)) || return 1
     done
     ((10#$port >= 1 && 10#$port <= 65535))
+}
+
+normalize_adb_target() {
+    local target=$1
+    if [[ "$target" =~ ^[0-9]{1,5}$ ]] && ((10#$target >= 1 && 10#$target <= 65535)); then
+        printf '%s:%s\n' "$default_adb_address" "$target"
+        return
+    fi
+    printf '%s\n' "$target"
 }
 
 find_adb() {
@@ -76,17 +86,18 @@ No online Wi-Fi ADB device with an IP:port endpoint was found.
 2. Go to Settings > Wireless debugging.
 3. Turn Wireless debugging on and keep this screen open.
 4. If this laptop is not already paired, tap "Pair device with pairing code".
-5. Enter that pairing IP:port below; ADB will then ask for the six-digit code.
+5. Enter that pairing port below; ADB will then ask for the six-digit code.
 6. Return to the main Wireless debugging screen for its separate IP address & Port.
 EOF
     while true; do
-        read -r -p "Pairing IP:port (press Enter if already paired): " pairing_target || \
+        read -r -p "Pairing port for 192.168.1.100 (or full IP:port; press Enter if already paired): " pairing_target || \
             fail "Wireless debugging setup was cancelled."
         if [[ -z "$pairing_target" ]]; then
             break
         fi
+        pairing_target=$(normalize_adb_target "$pairing_target")
         if ! validate_adb_target "$pairing_target"; then
-            echo "Pairing target must contain a valid IPv4 address and port. Please try again." >&2
+            echo "Pairing target must be a valid port or IPv4 address and port. Please try again." >&2
             continue
         fi
         if ! "$adb" pair "$pairing_target"; then
@@ -96,10 +107,11 @@ EOF
         break
     done
 
-    read -r -p "IP address & Port from the main Wireless debugging screen: " connection_target || \
+    read -r -p "Connection port for 192.168.1.100 (or full IP:port): " connection_target || \
         fail "Wireless debugging setup was cancelled."
+    connection_target=$(normalize_adb_target "$connection_target")
     validate_adb_target "$connection_target" || \
-        fail "Connection target must contain a valid IPv4 address and port."
+        fail "Connection target must be a valid port or IPv4 address and port."
     "$adb" connect "$connection_target" || fail "ADB connection failed."
 }
 

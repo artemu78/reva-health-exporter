@@ -161,7 +161,8 @@ devices not intended for the release before continuing.
 
 If no online IPv4 endpoint is present, the command starts an interactive recovery flow. It asks you
 to disconnect VPN on the phone and laptop, open Wireless debugging, optionally enter the pairing
-IP:port and six-digit code, and finally enter the separate connection IP:port from the main screen.
+port and six-digit code, and finally enter the separate connection port from the main screen. A port
+by itself uses `192.168.1.100`; a full `IP:port` remains accepted when the phone has another address.
 After connecting, it reads `adb devices -l` again before continuing.
 
 Then run:

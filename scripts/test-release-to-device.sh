@@ -84,7 +84,8 @@ case "$*" in
                 ;;
             recovery)
                 if [[ -f "$REVA_TEST_ADB_STATE_FILE" ]]; then
-                    printf '198.51.100.42:40239 device product:lisa_ru model:2109119DG device:lisa transport_id:31\n'
+                    printf '%s:40239 device product:lisa_ru model:2109119DG device:lisa transport_id:31\n' \
+                        "${REVA_TEST_ADB_ADDRESS:-198.51.100.42}"
                 fi
                 ;;
             multiple)
@@ -101,9 +102,28 @@ case "$*" in
         fi
         printf 'Successfully paired to 198.51.100.42:37123\n'
         ;;
+    "pair 192.168.1.100:37123")
+        read -r pairing_code
+        [[ "$pairing_code" == "123456" ]] || exit 1
+        printf 'Successfully paired to 192.168.1.100:37123\n'
+        ;;
     "connect 198.51.100.42:40239")
         [[ -z "${REVA_TEST_ADB_STATE_FILE:-}" ]] || : >"$REVA_TEST_ADB_STATE_FILE"
         printf 'already connected to 198.51.100.42:40239\n'
+        ;;
+    "connect 192.168.1.100:40239")
+        [[ -z "${REVA_TEST_ADB_STATE_FILE:-}" ]] || : >"$REVA_TEST_ADB_STATE_FILE"
+        printf 'already connected to 192.168.1.100:40239\n'
+        ;;
+    "-s 192.168.1.100:40239 get-state") printf 'device\n' ;;
+    "-s 192.168.1.100:40239 install -r "*) printf 'Success\n' ;;
+    "-s 192.168.1.100:40239 shell dumpsys package dev.reva.healthexporter")
+        printf 'versionCode=%s minSdk=30 targetSdk=36\nversionName=%s\n' \
+            "$REVA_TEST_VERSION_CODE" "$REVA_TEST_VERSION_NAME"
+        ;;
+    "-s 192.168.1.100:40239 shell am force-stop dev.reva.healthexporter") ;;
+    "-s 192.168.1.100:40239 shell am start -W -n dev.reva.healthexporter/.MainActivity")
+        printf 'Status: ok\n'
         ;;
     "-s 198.51.100.42:40239 get-state") printf 'device\n' ;;
     "-s 198.51.100.42:40239 install -r "*)
@@ -169,6 +189,26 @@ echo "release-to-device wireless connection recovery test passed"
 
 : >"$command_log"
 rm -f "$device_state_file"
+port_only_output=$(
+    printf '37123\n123456\n40239\n' | env \
+        PATH="$fake_bin:$PATH" \
+        REVA_RELEASE_DOWNLOAD_DIR="$download_dir" \
+        REVA_TEST_COMMAND_LOG="$command_log" \
+        REVA_TEST_ADB_DEVICES_MODE=recovery \
+        REVA_TEST_ADB_STATE_FILE="$device_state_file" \
+        REVA_TEST_ADB_ADDRESS=192.168.1.100 \
+            "$script_under_test" 2>&1
+)
+
+grep -Fq 'adb pair 192.168.1.100:37123' "$command_log"
+grep -Fq 'adb connect 192.168.1.100:40239' "$command_log"
+grep -Fq 'adb -s 192.168.1.100:40239 install -r' "$command_log"
+grep -Fq "Installed and launched Reva Health Exporter v${test_version_name}" <<<"$port_only_output"
+
+echo "release-to-device port-only wireless recovery test passed"
+
+: >"$command_log"
+rm -f "$device_state_file"
 wireless_retry_output=$(
     printf 'invalid-target\n198.51.100.42:37123\nwrongcode\n198.51.100.42:37123\n123456\n198.51.100.42:40239\n' | env \
         PATH="$fake_bin:$PATH" \
@@ -179,7 +219,7 @@ wireless_retry_output=$(
             "$script_under_test" 2>&1
 )
 
-grep -Fq 'Pairing target must contain a valid IPv4 address and port. Please try again.' <<<"$wireless_retry_output"
+grep -Fq 'Pairing target must be a valid port or IPv4 address and port. Please try again.' <<<"$wireless_retry_output"
 grep -Fq 'ADB pairing failed (the pairing code may be incorrect or expired). Please try again.' <<<"$wireless_retry_output"
 grep -Fq 'adb pair 198.51.100.42:37123' "$command_log"
 grep -Fq 'adb connect 198.51.100.42:40239' "$command_log"
