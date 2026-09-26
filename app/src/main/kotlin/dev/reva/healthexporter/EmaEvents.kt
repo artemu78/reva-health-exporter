@@ -248,38 +248,15 @@ fun deserializeEmaEvent(serialized: String): EmaEvent? {
         if (schemaVersion !in setOf(1, 2)) return null
 
         val status = EmaResponseStatus.fromWireValue(json.get("status")?.asString ?: return null) ?: return null
-        val mood = json.get("mood")?.asInt
-        val energy = json.get("energy")?.asInt
-        val focus = json.get("focus")?.asInt
-        val stress = json.get("stress")?.asInt
-        val core = listOf(mood, energy, focus, stress)
-        val additional = json.getAsJsonObject("additionalAnswers")?.entrySet()
-            ?.associate { (key, value) -> key to value.asInt }.orEmpty()
-        val answers = if (core.any { it != null } || additional.isNotEmpty()) {
-            EmaAnswers(mood, energy, focus, stress, additional)
-        } else {
-            null
-        }
+        val answers = json.readEmaAnswers()
         val activity = json.get("activity")?.asString
         val answeredAt = json.get("answeredAt")?.asString?.let(Instant::parse)
-
-        if (status == EmaResponseStatus.ANSWERED) {
-            if (answeredAt == null) return null
-            if (schemaVersion == 1 && (core.any { it == null } || activity.isNullOrBlank())) return null
-            if (schemaVersion == 2 && answers?.hasCoreAnswer() != true && activity.isNullOrBlank()) return null
-            if (activity.isNullOrBlank() && json.has("activityLabel")) return null
-        } else {
-            if (answers != null || answeredAt != null || activity != null ||
-                json.has("activityLabel") || json.has("note") || json.has("additionalAnswers")
-            ) return null
-        }
+        if (!json.hasValidResponseFields(schemaVersion, status, answers, activity, answeredAt)) return null
 
         EmaEvent(
             schemaVersion = schemaVersion,
             id = json.get("id")?.asString ?: return null,
-            scheduleDate = json.get("scheduleDate")?.asString?.let(LocalDate::parse)
-                ?: Instant.parse(json.get("scheduledAt")?.asString ?: return null)
-                    .atZone(ZoneId.of(json.get("timezone")?.asString ?: return null)).toLocalDate(),
+            scheduleDate = json.readScheduleDate() ?: return null,
             scheduledAt = Instant.parse(json.get("scheduledAt")?.asString ?: return null),
             answeredAt = answeredAt,
             answers = answers,
@@ -292,4 +269,42 @@ fun deserializeEmaEvent(serialized: String): EmaEvent? {
     } catch (_: Exception) {
         null
     }
+}
+
+private fun JsonObject.readEmaAnswers(): EmaAnswers? {
+    val answers = EmaAnswers(
+        mood = get("mood")?.asInt,
+        energy = get("energy")?.asInt,
+        focus = get("focus")?.asInt,
+        stress = get("stress")?.asInt,
+        additional = getAsJsonObject("additionalAnswers")?.entrySet()
+            ?.associate { (key, value) -> key to value.asInt }.orEmpty(),
+    )
+    return answers.takeIf { it.hasCoreAnswer() || it.additional.isNotEmpty() }
+}
+
+private fun JsonObject.hasValidResponseFields(
+    schemaVersion: Int,
+    status: EmaResponseStatus,
+    answers: EmaAnswers?,
+    activity: String?,
+    answeredAt: Instant?,
+): Boolean = if (status == EmaResponseStatus.ANSWERED) {
+    val hasRequiredAnswer = when (schemaVersion) {
+        1 -> answers?.let { listOf(it.mood, it.energy, it.focus, it.stress).all { value -> value != null } } == true &&
+            !activity.isNullOrBlank()
+        2 -> answers?.hasCoreAnswer() == true || !activity.isNullOrBlank()
+        else -> false
+    }
+    answeredAt != null && hasRequiredAnswer && (!activity.isNullOrBlank() || !has("activityLabel"))
+} else {
+    answers == null && answeredAt == null && activity == null &&
+        listOf("activityLabel", "note", "additionalAnswers").none(::has)
+}
+
+private fun JsonObject.readScheduleDate(): LocalDate? {
+    get("scheduleDate")?.asString?.let { return LocalDate.parse(it) }
+    val scheduledAt = get("scheduledAt")?.asString ?: return null
+    val timezone = get("timezone")?.asString ?: return null
+    return Instant.parse(scheduledAt).atZone(ZoneId.of(timezone)).toLocalDate()
 }
