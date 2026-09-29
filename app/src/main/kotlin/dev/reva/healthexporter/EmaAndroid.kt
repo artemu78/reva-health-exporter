@@ -8,6 +8,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Icon
+import android.media.AudioAttributes
+import android.provider.Settings
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -103,6 +105,8 @@ class EmaScheduleRefreshWorker(
 
 class AndroidEmaNotificationGateway(
     private val context: Context,
+    private val now: () -> Instant = Instant::now,
+    private val channelId: String = CHANNEL_ID,
 ) : EmaNotificationGateway {
     private val manager = context.getSystemService(NotificationManager::class.java)
 
@@ -116,7 +120,7 @@ class AndroidEmaNotificationGateway(
         val requestCode = eventId.hashCode()
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val dismissPendingIntent = PendingIntent.getBroadcast(context, requestCode, dismissIntent, flags)
-        val notification = Notification.Builder(context, CHANNEL_ID)
+        val notification = Notification.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_ema_notification)
             .setContentTitle(context.getString(R.string.ema_notification_title))
             .setContentText(context.getString(R.string.ema_notification_text))
@@ -131,6 +135,8 @@ class AndroidEmaNotificationGateway(
             )
             .setAutoCancel(false)
             .setOnlyAlertOnce(true)
+            .setWhen(now().toEpochMilli())
+            .setShowWhen(true)
             .setCategory(Notification.CATEGORY_REMINDER)
             .build()
         manager.notify(notificationId(eventId), notification)
@@ -143,11 +149,20 @@ class AndroidEmaNotificationGateway(
     private fun ensureChannel() {
         manager.createNotificationChannel(
             NotificationChannel(
-                CHANNEL_ID,
+                channelId,
                 context.getString(R.string.ema_notification_channel),
                 NotificationManager.IMPORTANCE_DEFAULT,
             ).apply {
                 description = context.getString(R.string.ema_notification_channel_description)
+                // Keep the symbolic default URI so Android follows the system sound selection.
+                // Re-registering this channel preserves the user's existing channel preferences.
+                setSound(
+                    Settings.System.DEFAULT_NOTIFICATION_URI,
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
             },
         )
     }

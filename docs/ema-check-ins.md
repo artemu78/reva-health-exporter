@@ -21,6 +21,13 @@ The Settings screen can enable or disable notifications, change active hours, ch
 per day, and replace the activity choices. Changing settings expires the old pending schedule and creates
 a new one without changing completed historical observations.
 
+EMA notifications show their creation time (when the reminder is posted, which may be later than
+its scheduled time). New notification channels use the system default notification sound and normal
+notification audio, subject to Android volume, silent mode, and Do Not Disturb settings. Existing
+channel choices are preserved. To change a muted channel or a custom sound, long-press an EMA
+notification and open its Android notification settings; select an alerting mode and the default
+notification sound there. Updating the app does not reset these preferences.
+
 ## Check-in record
 
 Every scheduled prompt is persisted before its worker is enqueued. Pending records may retain schema
